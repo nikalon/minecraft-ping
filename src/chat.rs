@@ -1,5 +1,5 @@
 use serde_json::{Value};
-use colored::{Colorize, control};
+use colored::{Colorize};
 
 pub fn chat_to_str(text: &Value) -> String {
     // Parse text as JSON chat using the current system and the old system. Additionaly apply front styles.

@@ -3,11 +3,12 @@ mod chat;
 
 use core::panic;
 use std::{net::{TcpStream, ToSocketAddrs}, io::{Write, Read, BufReader, BufWriter, stderr, stdout}, env::args, time::Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 use base64::{Engine as _, engine::general_purpose};
 use data_types::*;
+use colored::Colorize;
 
-const MINECRAFT_PROTOCOL_VERSION: i32 = 758;
-const SUPER_DUPER_MAGIC_VALUE: i64 = 873646492;
+const MIN_MINECRAFT_PROTOCOL_VERSION: i32 = 0;
 
 struct Arguments {
     get_favicon: bool,
@@ -32,7 +33,7 @@ impl Arguments {
         let mut positional_i = 0;
         for (i, arg) in args.iter().enumerate() {
             match arg.as_ref() {
-                "-v" | "--v" => { arguments.verbose = true; }
+                "-v" | "--verbose" => { arguments.verbose = true; }
                 "-f" | "--favicon" => { arguments.get_favicon = true; }
                 "-r" | "--raw-response" => { arguments.raw_response = true; }
                 _ => {
@@ -63,6 +64,7 @@ fn main() {
                     .expect("Invalid host address")
                     .next()
                     .expect("Invalid host address");
+    print_line_verbose("Attempting to connect...", &arguments);
     let tcp_connection = TcpStream::connect(address).expect("Could not connect to server");
     let mut buf_reader = BufReader::new(&tcp_connection);
     let mut buf_writer = BufWriter::new(&tcp_connection);
@@ -81,14 +83,21 @@ fn main() {
     let server_response: Response = serde_json::from_str(&status_response_json).unwrap();
 
     // Calculate server response time
-    let start_time = send_ping_request(&mut buf_writer);
+    let system_time_sec = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(t) => t.as_secs() as i64,
+        Err(_) => 0
+    };
+    let start_time = send_ping_request(&mut buf_writer, system_time_sec);
     print_line_verbose("Sent ping request!", &arguments);
 
-    read_ping_request(&mut buf_reader);
+    let payload = read_pong_response(&mut buf_reader);
+    if payload != system_time_sec {
+        panic!("Error: the server's pong response is an invalid value: 0x{payload:x}. Sent: 0x{system_time_sec:x}");
+    }
+
     let response_elapsed_time = start_time.elapsed();
     print_line_verbose("Received pong response!", &arguments);
     print_line_verbose(format!("Delay: {} ms", response_elapsed_time.as_millis()).as_ref(), &arguments);
-
     print_line_verbose("Disconnected", &arguments);
 
     if arguments.get_favicon {
@@ -102,11 +111,11 @@ fn main() {
                 general_purpose::STANDARD.decode_vec(favicon, &mut buf).unwrap();
                 let _ = stdout().write_all(&buf);
             } else {
-                eprintln!("WARNING: Could not decode favicon because it has an unknown format. Printing it as raw data...");
+                eprintln!("{}", "WARNING: Could not decode favicon because it has an unknown format. Printing it as raw data...".yellow());
                 let _ = stdout().write_all(favicon.as_bytes());
             }
         } else {
-            eprintln!("WARNING: This server doesn't have a favicon.");
+            eprintln!("{}", "WARNING: This server doesn't have a favicon.".yellow());
         }
     } else if arguments.raw_response {
         // Print raw response data
@@ -149,14 +158,13 @@ fn main() {
 }
 
 fn send_handshake<T: Write>(output: &mut T, server_address: &str, port: u16) {
-    // TODO: Write to output only once for performance reasons
     let mut buffer: Vec<u8> = Vec::with_capacity(4096);
 
     // Packet ID
     write_var_int(&mut buffer, 0);
 
     // Protocol version
-    write_var_int(&mut buffer, MINECRAFT_PROTOCOL_VERSION);
+    write_var_int(&mut buffer, MIN_MINECRAFT_PROTOCOL_VERSION);
 
     // Server address
     write_string(&mut buffer, server_address);
@@ -184,7 +192,7 @@ fn send_status_request<T: Write>(output: &mut T) {
     output.flush().unwrap();
 }
 
-fn send_ping_request<T: Write>(output: &mut T) -> Instant {
+fn send_ping_request<T: Write>(output: &mut T, payload: i64) -> Instant {
     // Packet length
     write_var_int(output, 9); // 1 + 8 bytes
 
@@ -192,7 +200,7 @@ fn send_ping_request<T: Write>(output: &mut T) -> Instant {
     write_var_int(output, 1); // Should be one byte
 
     // Payload
-    write_long(output, SUPER_DUPER_MAGIC_VALUE); // Should be 8 bytes
+    write_long(output, payload); // Should be 8 bytes
     output.flush().unwrap();
 
     Instant::now()
@@ -225,7 +233,7 @@ fn read_status_response<T: Read>(input: &mut T) -> String {
     server_info
 }
 
-fn read_ping_request<T: Read>(input: &mut T) {
+fn read_pong_response<T: Read>(input: &mut T) -> i64 {
     // Packet length
     let packet_length = read_var_int(input);
     if packet_length < 0 {
@@ -243,14 +251,13 @@ fn read_ping_request<T: Read>(input: &mut T) {
 
     // Payload
     let payload = read_long(&mut input);
-    if payload != SUPER_DUPER_MAGIC_VALUE {
-        panic!("Error: the server's pong response was an invalid value: 0x{payload:x}");
-    }
 
     // Checks if all bytes were read. If it didn't we probably screwed up somewhere.
     if input.bytes().count() != 0 {
         panic!("ERROR: There are still some bytes to read in the current packet");
     }
+
+    payload
 }
 
 fn print_line_verbose(msg: &str, arguments: &Arguments) {
