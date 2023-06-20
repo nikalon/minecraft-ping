@@ -1,8 +1,9 @@
 use serde_json::{Value};
-use colored::Colorize;
+use colored::{Colorize, control};
 
 pub fn chat_to_str(text: &Value) -> String {
-    remove_old_control_sequences(parse_component(text))
+    // Parse text as JSON chat using the current system and the old system. Additionaly apply front styles.
+    parse_component(text)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -101,7 +102,17 @@ fn parse_component(text: &Value) -> String {
 }
 
 fn apply_styles(str: &str, out: &mut String, style: Style) {
-    let mut styled_string = str.clear();
+    // TODO: We are allocating a lot of memory in this function unnecessarily because I haven't found a way to use the API
+    // efficiently. Maybe I should drop the 'colored' crate and implement ANSI colors myself? Could be easier, idk.
+
+    let mut str_iter = str.chars();
+
+    // Apply formatting using the current style inheritance system. Override styles from the parent style if needed.
+    let mut styled_string = str_iter.by_ref()
+                                    .take_while(|c| *c != '§')
+                                    .collect::<String>()
+                                    .normal()
+                                    .clear();
 
     if style.bold {
         styled_string = styled_string.bold();
@@ -127,8 +138,76 @@ fn apply_styles(str: &str, out: &mut String, style: Style) {
         styled_string = styled_string.color(color);
     }
 
-    // to_string() seems to be allocating more memory unnecessarily
     out.push_str(styled_string.to_string().as_ref());
+
+
+    // Apply formatting using the old system. This system takes precedence over the current system and doesn't participate
+    // in the style inheritance system, so any styles applied here don't propagate to child components.
+    // The way this old system work is very similar to ANSI colors in terminals. It will apply a style based on a control
+    // sequence until it finds a reset sequence. It is possible to apply multiple styles at once.
+    let mut style = Style::default();
+    while let Some(control_sequence) = str_iter.next() {
+        let mut styled_string = str_iter.by_ref()
+                                  .take_while(|c| *c != '§')
+                                  .collect::<String>()
+                                  .normal()
+                                  .clear();
+        match control_sequence {
+            // Colors
+            '0' => style.color = Some(Color{ red: 0x00, green: 0x00, blue: 0x00 }),
+            '1' => style.color = Some(Color{ red: 0x00, green: 0x00, blue: 0xaa }),
+            '2' => style.color = Some(Color{ red: 0x00, green: 0xaa, blue: 0x00 }),
+            '3' => style.color = Some(Color{ red: 0x00, green: 0xaa, blue: 0xaa }),
+            '4' => style.color = Some(Color{ red: 0xaa, green: 0x00, blue: 0x00 }),
+            '5' => style.color = Some(Color{ red: 0xaa, green: 0x00, blue: 0xaa }),
+            '6' => style.color = Some(Color{ red: 0xff, green: 0xaa, blue: 0x00 }),
+            '7' => style.color = Some(Color{ red: 0xaa, green: 0xaa, blue: 0xaa }),
+            '8' => style.color = Some(Color{ red: 0x55, green: 0x55, blue: 0x55 }),
+            '9' => style.color = Some(Color{ red: 0x55, green: 0x55, blue: 0xff }),
+            'a' => style.color = Some(Color{ red: 0x55, green: 0xff, blue: 0x55 }),
+            'b' => style.color = Some(Color{ red: 0x55, green: 0xff, blue: 0xff }),
+            'c' => style.color = Some(Color{ red: 0xff, green: 0x55, blue: 0x55 }),
+            'd' => style.color = Some(Color{ red: 0xff, green: 0x55, blue: 0xff }),
+            'e' => style.color = Some(Color{ red: 0xff, green: 0xff, blue: 0x55 }),
+            'f' => style.color = Some(Color{ red: 0xff, green: 0xff, blue: 0xff }),
+
+            // Styles
+            'k' => style.obfuscated = true, // Obfuscated / Random
+            'l' => style.bold = true,
+            'm' => style.strikethrough = true,
+            'n' => style.underline = true,
+            'o' => style.italic = true,
+            'r' => style = Style::default(), // Reset
+
+            _ => {}
+        };
+
+        if style.bold {
+            styled_string = styled_string.bold();
+        }
+
+        if style.italic {
+            styled_string = styled_string.italic();
+        }
+
+        if style.underline {
+            styled_string = styled_string.underline();
+        }
+
+        if style.strikethrough {
+            styled_string = styled_string.strikethrough();
+        }
+
+        if style.obfuscated {
+            styled_string = styled_string.blink();
+        }
+
+        if let Some(color) = style.color {
+            styled_string = styled_string.color(color);
+        }
+
+        out.push_str(styled_string.to_string().as_ref());
+    }
 }
 
 fn parse_color(color: &str) -> Option<Color> {
@@ -168,23 +247,6 @@ fn parse_web_color(color: &str) -> Option<Color> {
     }
 
     None
-}
-
-fn remove_old_control_sequences(text: String) -> String {
-    // TODO: Parse and implement styles for the old system
-    // TODO: The old system (if applied, because there can be a mix of both systems) doesn't inherit any styles from their parents,
-    // and it doesn't make their siblings inherit their styles. Style inheritance only works for the current system.
-    let mut ret = String::with_capacity(text.len());
-    let mut chars = text.chars();
-    while let Some(ch) = chars.next() {
-        if ch == '§' {
-            // Skip current and following character
-            chars.next();
-        } else {
-            ret.push(ch);
-        }
-    }
-    ret
 }
 
 #[cfg(test)]
