@@ -1,7 +1,6 @@
 mod data_types;
 mod chat;
 
-use core::panic;
 use std::{net::{TcpStream, ToSocketAddrs}, io::{Write, Read, BufReader, BufWriter, stderr, stdout}, env::args, time::Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 use base64::{Engine as _, engine::general_purpose};
@@ -65,34 +64,83 @@ fn main() {
                     .next()
                     .expect("Invalid host address");
     print_line_verbose("Attempting to connect...", &arguments);
-    let tcp_connection = TcpStream::connect(address).expect("Could not connect to server");
+    let tcp_connection = match TcpStream::connect(address) {
+        Ok(connection) => connection,
+        Err(_) => {
+            eprintln!("Could not connect to server");
+            return;
+        }
+    };
     let mut buf_reader = BufReader::new(&tcp_connection);
     let mut buf_writer = BufWriter::new(&tcp_connection);
     print_line_verbose(format!("Connection established to {}", &arguments.host).as_ref(), &arguments);
 
     // We need to ensure that we send the hostname (if provided) instead of the IP address because otherwise some servers
     // may not respond at all
-    send_handshake(&mut buf_writer, &arguments.host, arguments.port);
+    match send_handshake(&mut buf_writer, &arguments.host, arguments.port) {
+        Ok(response) => response,
+        Err(e) => {
+            eprintln!("Error: Could not send handshake");
+            eprintln!("More details: {e}");
+            return;
+        }
+    };
     print_line_verbose("Handshake request sent!", &arguments);
 
-    send_status_request(&mut buf_writer);
+    match send_status_request(&mut buf_writer) {
+        Ok(response) => response,
+        Err(e) => {
+            eprintln!("Error: Could not send status request");
+            eprintln!("More details: {e}");
+            return;
+        }
+    };
     print_line_verbose("Status request sent!", &arguments);
 
-    let status_response_json = read_status_response(&mut buf_reader);
+    let status_response_json = match read_status_response(&mut buf_reader) {
+        Ok(response) => response,
+        Err(e) => {
+            eprintln!("Error: Could not read status response");
+            eprintln!("More details: {e}");
+            return;
+        }
+    };
     print_line_verbose("Received status response!", &arguments);
-    let server_response: Response = serde_json::from_str(&status_response_json).unwrap();
+    let server_response: Response = match serde_json::from_str(&status_response_json) {
+        Ok(response) => response,
+        Err(e) => {
+            eprintln!("Error: Could not decode response because it has malformed JSON data");
+            eprintln!("More details: {e}");
+            return;
+        }
+    };
 
     // Calculate server response time
     let system_time_sec = match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(t) => t.as_secs() as i64,
         Err(_) => 0
     };
-    let start_time = send_ping_request(&mut buf_writer, system_time_sec);
+    let start_time = match send_ping_request(&mut buf_writer, system_time_sec) {
+        Ok(time) => time,
+        Err(e) => {
+            eprintln!("Error: Could not send ping request");
+            eprintln!("More details: {e}");
+            return;
+        }
+    };
     print_line_verbose("Sent ping request!", &arguments);
 
-    let payload = read_pong_response(&mut buf_reader);
+    let payload = match read_pong_response(&mut buf_reader) {
+        Ok(payload) => payload,
+        Err(e) => {
+            eprintln!("Error: Could not read pong response");
+            eprintln!("More details: {e}");
+            return;
+        }
+    };
     if payload != system_time_sec {
-        panic!("Error: the server's pong response is an invalid value: 0x{payload:x}. Sent: 0x{system_time_sec:x}");
+        eprintln!("Error: the server's pong response is an invalid value: 0x{payload:x}. Sent: 0x{system_time_sec:x}");
+        return;
     }
 
     let response_elapsed_time = start_time.elapsed();
@@ -107,9 +155,13 @@ fn main() {
             if favicon.starts_with(FORMAT) {
                 let mut buf = Vec::with_capacity(favicon.len());
                 // Delete prefix and decode the image as Base64
-                let favicon = favicon.strip_prefix(FORMAT).unwrap().as_bytes();
-                general_purpose::STANDARD.decode_vec(favicon, &mut buf).unwrap();
-                let _ = stdout().write_all(&buf);
+                let result = favicon.strip_prefix(FORMAT)
+                                    .and_then(|favicon| Some(favicon.as_bytes()))
+                                    .and_then(|favicon| general_purpose::STANDARD.decode_vec(favicon, &mut buf).ok())
+                                    .and_then(|_| Some(stdout().write_all(&buf)));
+                if result.is_none() {
+                    eprintln!("Error: Could not decode favicon")
+                }
             } else {
                 eprintln!("{}", "WARNING: Could not decode favicon because it has an unknown format. Printing it as raw data...".yellow());
                 let _ = stdout().write_all(favicon.as_bytes());
@@ -157,69 +209,71 @@ fn main() {
     }
 }
 
-fn send_handshake<T: Write>(output: &mut T, server_address: &str, port: u16) {
+fn send_handshake<T: Write>(output: &mut T, server_address: &str, port: u16) -> Result<(), String> {
     let mut buffer: Vec<u8> = Vec::with_capacity(4096);
 
     // Packet ID
-    write_var_int(&mut buffer, 0);
+    write_var_int(&mut buffer, 0)?;
 
     // Protocol version
-    write_var_int(&mut buffer, MIN_MINECRAFT_PROTOCOL_VERSION);
+    write_var_int(&mut buffer, MIN_MINECRAFT_PROTOCOL_VERSION)?;
 
     // Server address
-    write_string(&mut buffer, server_address);
+    write_string(&mut buffer, server_address)?;
 
     // Server port
-    write_unsigned_short(&mut buffer, port);
+    write_unsigned_short(&mut buffer, port)?;
 
     // Next state
-    write_var_int(&mut buffer, 1);
+    write_var_int(&mut buffer, 1)?;
 
     // Packet length
     let packet_size = buffer.len();
-    write_var_int(output, packet_size as i32);
+    write_var_int(output, packet_size as i32)?;
 
-    output.write_all(&buffer).unwrap();
-    output.flush().unwrap();
+    output.write_all(&buffer).map_err(|e| e.to_string())?;
+    output.flush().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
-fn send_status_request<T: Write>(output: &mut T) {
+fn send_status_request<T: Write>(output: &mut T) -> Result<(), String> {
     // Packet length
-    write_var_int(output, 1); // Packet size should be one byte...
+    write_var_int(output, 1)?; // Packet size should be one byte...
 
     // Packet ID
-    write_var_int(output, 0); // ...because zero is represented as one byte for a VarInt
-    output.flush().unwrap();
+    write_var_int(output, 0)?; // ...because zero is represented as one byte for a VarInt
+    output.flush().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
-fn send_ping_request<T: Write>(output: &mut T, payload: i64) -> Instant {
+fn send_ping_request<T: Write>(output: &mut T, payload: i64) -> Result<Instant, String> {
     // Packet length
-    write_var_int(output, 9); // 1 + 8 bytes
+    write_var_int(output, 9)?; // 1 + 8 bytes
 
     // Packet ID
-    write_var_int(output, 1); // Should be one byte
+    write_var_int(output, 1)?; // Should be one byte
 
     // Payload
-    write_long(output, payload); // Should be 8 bytes
-    output.flush().unwrap();
+    write_long(output, payload)?; // Should be 8 bytes
+    output.flush().map_err(|e| e.to_string())?;
 
-    Instant::now()
+    Ok(Instant::now())
 }
 
-fn read_status_response<T: Read>(input: &mut T) -> String {
+fn read_status_response<T: Read>(input: &mut T) -> Result<String, String> {
     // Packet length
-    let packet_length = read_var_int(input);
+    let packet_length = read_var_int(input)?;
     if packet_length < 0 {
-        panic!("Invalid packet length: {}", packet_length);
+        return Err(format!("Invalid packet length: {packet_length}"));
     }
 
     // Here we will ensure that we don't read more than **packet_length** bytes for this packet
     let mut input = input.take(packet_length as u64);
 
     // Packet ID
-    let packet_id = read_var_int(&mut input);
+    let packet_id = read_var_int(&mut input)?;
     if packet_id != 0 {
-        panic!("Error: The server responded with an unknown packet ID: 0x{packet_id:x}");
+        return Err(format!("Error: The server responded with an unknown packet ID: 0x{packet_id:x}"));
     }
 
     // JSON response
@@ -227,37 +281,37 @@ fn read_status_response<T: Read>(input: &mut T) -> String {
 
     // Checks if all bytes were read. If it didn't we probably screwed up somewhere.
     if input.bytes().count() != 0 {
-        panic!("ERROR: There are still some bytes to read in the current packet");
+        return Err("ERROR: There are still some bytes to read in the current packet".to_owned());
     }
 
     server_info
 }
 
-fn read_pong_response<T: Read>(input: &mut T) -> i64 {
+fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     // Packet length
-    let packet_length = read_var_int(input);
+    let packet_length = read_var_int(input)?;
     if packet_length < 0 {
-        panic!("Invalid packet length: {}", packet_length);
+        return Err(format!("Invalid packet length: {}", packet_length));
     }
 
     // Here we will ensure that we don't read more than **packet_length** bytes for this packet
     let mut input = input.take(packet_length as u64);
 
     // Packet ID
-    let packet_id = read_var_int(&mut input);
+    let packet_id = read_var_int(&mut input)?;
     if packet_id != 1 {
-        panic!("Error: The server responded with an unknown packet ID: 0x{packet_id:x}");
+        return Err(format!("Error: The server responded with an unknown packet ID: 0x{packet_id:x}"));
     }
 
     // Payload
-    let payload = read_long(&mut input);
+    let payload = read_long(&mut input)?;
 
     // Checks if all bytes were read. If it didn't we probably screwed up somewhere.
     if input.bytes().count() != 0 {
-        panic!("ERROR: There are still some bytes to read in the current packet");
+        return Err("ERROR: There are still some bytes to read in the current packet".to_owned());
     }
 
-    payload
+    Ok(payload)
 }
 
 fn print_line_verbose(msg: &str, arguments: &Arguments) {

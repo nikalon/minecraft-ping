@@ -2,7 +2,7 @@ use serde_json::{Value};
 use colored::{Colorize};
 
 pub fn chat_to_str(text: &Value) -> String {
-    // Parse text as JSON chat using the current system and the old system. Additionaly apply front styles.
+    // Parse text as a JSON chat object and apply font styles
     parse_component(text)
 }
 
@@ -86,13 +86,13 @@ fn parse_component(text: &Value) -> String {
                 // Parse sibling components. If the "extra" property is not an array we ignore it.
                 if let Some(value) = &chat_object.get("extra") {
                     if value.is_array() {
-                        components.push((*value, style.clone()));
+                        components.push((*value, style));
                     }
                 }
             },
             Value::Array(siblings) => {
                 for sibling in siblings.iter().rev() {
-                    components.push((sibling, style.clone()));
+                    components.push((sibling, style));
                 }
             },
             t => apply_styles(&t.to_string(), &mut str, style) // Convert booleans and numbers into a string
