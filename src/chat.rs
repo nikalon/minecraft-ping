@@ -1,5 +1,5 @@
-use serde_json::{Value};
-use colored::{Colorize};
+use colored::Colorize;
+use serde_json::Value;
 
 pub fn chat_to_str(text: &Value) -> String {
     // Parse text as a JSON chat object and apply font styles
@@ -10,12 +10,16 @@ pub fn chat_to_str(text: &Value) -> String {
 struct Color {
     red: u8,
     green: u8,
-    blue: u8
+    blue: u8,
 }
 
 impl From<Color> for colored::Color {
     fn from(value: Color) -> Self {
-        colored::Color::TrueColor{ r: value.red, g: value.green, b: value.blue }
+        colored::Color::TrueColor {
+            r: value.red,
+            g: value.green,
+            b: value.blue,
+        }
     }
 }
 
@@ -26,7 +30,7 @@ struct Style {
     underline: bool,
     strikethrough: bool,
     obfuscated: bool,
-    color: Option<Color>
+    color: Option<Color>,
 }
 
 impl Style {
@@ -37,7 +41,7 @@ impl Style {
             underline: false,
             strikethrough: false,
             obfuscated: false,
-            color: None
+            color: None,
         }
     }
 }
@@ -49,7 +53,7 @@ fn parse_component(text: &Value) -> String {
     let mut components = vec![(text, Style::default())];
     while let Some((comp, style)) = components.pop() {
         match comp {
-            Value::Null => {}, // Null is ignored
+            Value::Null => {} // Null is ignored
             Value::String(t) => apply_styles(t, &mut str, style),
             Value::Object(chat_object) => {
                 // Set styles for this component
@@ -89,13 +93,13 @@ fn parse_component(text: &Value) -> String {
                         components.push((*value, style));
                     }
                 }
-            },
+            }
             Value::Array(siblings) => {
                 for sibling in siblings.iter().rev() {
                     components.push((sibling, style));
                 }
-            },
-            t => apply_styles(&t.to_string(), &mut str, style) // Convert booleans and numbers into a string
+            }
+            t => apply_styles(&t.to_string(), &mut str, style), // Convert booleans and numbers into a string
         }
     }
     str
@@ -108,11 +112,12 @@ fn apply_styles(str: &str, out: &mut String, style: Style) {
     let mut str_iter = str.chars();
 
     // Apply formatting using the current style inheritance system. Override styles from the parent style if needed.
-    let mut styled_string = str_iter.by_ref()
-                                    .take_while(|c| *c != '§')
-                                    .collect::<String>()
-                                    .normal()
-                                    .clear();
+    let mut styled_string = str_iter
+        .by_ref()
+        .take_while(|c| *c != '§')
+        .collect::<String>()
+        .normal()
+        .clear();
 
     if style.bold {
         styled_string = styled_string.bold();
@@ -140,36 +145,132 @@ fn apply_styles(str: &str, out: &mut String, style: Style) {
 
     out.push_str(styled_string.to_string().as_ref());
 
-
     // Apply formatting using the old system. This system takes precedence over the current system and doesn't participate
     // in the style inheritance system, so any styles applied here don't propagate to child components.
     // The way this old system work is very similar to ANSI colors in terminals. It will apply a style based on a control
     // sequence until it finds a reset sequence. It is possible to apply multiple styles at once.
     let mut style = Style::default();
     while let Some(control_sequence) = str_iter.next() {
-        let mut styled_string = str_iter.by_ref()
-                                  .take_while(|c| *c != '§')
-                                  .collect::<String>()
-                                  .normal()
-                                  .clear();
+        let mut styled_string = str_iter
+            .by_ref()
+            .take_while(|c| *c != '§')
+            .collect::<String>()
+            .normal()
+            .clear();
         match control_sequence {
             // Colors
-            '0' => style.color = Some(Color{ red: 0x00, green: 0x00, blue: 0x00 }),
-            '1' => style.color = Some(Color{ red: 0x00, green: 0x00, blue: 0xaa }),
-            '2' => style.color = Some(Color{ red: 0x00, green: 0xaa, blue: 0x00 }),
-            '3' => style.color = Some(Color{ red: 0x00, green: 0xaa, blue: 0xaa }),
-            '4' => style.color = Some(Color{ red: 0xaa, green: 0x00, blue: 0x00 }),
-            '5' => style.color = Some(Color{ red: 0xaa, green: 0x00, blue: 0xaa }),
-            '6' => style.color = Some(Color{ red: 0xff, green: 0xaa, blue: 0x00 }),
-            '7' => style.color = Some(Color{ red: 0xaa, green: 0xaa, blue: 0xaa }),
-            '8' => style.color = Some(Color{ red: 0x55, green: 0x55, blue: 0x55 }),
-            '9' => style.color = Some(Color{ red: 0x55, green: 0x55, blue: 0xff }),
-            'a' => style.color = Some(Color{ red: 0x55, green: 0xff, blue: 0x55 }),
-            'b' => style.color = Some(Color{ red: 0x55, green: 0xff, blue: 0xff }),
-            'c' => style.color = Some(Color{ red: 0xff, green: 0x55, blue: 0x55 }),
-            'd' => style.color = Some(Color{ red: 0xff, green: 0x55, blue: 0xff }),
-            'e' => style.color = Some(Color{ red: 0xff, green: 0xff, blue: 0x55 }),
-            'f' => style.color = Some(Color{ red: 0xff, green: 0xff, blue: 0xff }),
+            '0' => {
+                style.color = Some(Color {
+                    red: 0x00,
+                    green: 0x00,
+                    blue: 0x00,
+                })
+            }
+            '1' => {
+                style.color = Some(Color {
+                    red: 0x00,
+                    green: 0x00,
+                    blue: 0xaa,
+                })
+            }
+            '2' => {
+                style.color = Some(Color {
+                    red: 0x00,
+                    green: 0xaa,
+                    blue: 0x00,
+                })
+            }
+            '3' => {
+                style.color = Some(Color {
+                    red: 0x00,
+                    green: 0xaa,
+                    blue: 0xaa,
+                })
+            }
+            '4' => {
+                style.color = Some(Color {
+                    red: 0xaa,
+                    green: 0x00,
+                    blue: 0x00,
+                })
+            }
+            '5' => {
+                style.color = Some(Color {
+                    red: 0xaa,
+                    green: 0x00,
+                    blue: 0xaa,
+                })
+            }
+            '6' => {
+                style.color = Some(Color {
+                    red: 0xff,
+                    green: 0xaa,
+                    blue: 0x00,
+                })
+            }
+            '7' => {
+                style.color = Some(Color {
+                    red: 0xaa,
+                    green: 0xaa,
+                    blue: 0xaa,
+                })
+            }
+            '8' => {
+                style.color = Some(Color {
+                    red: 0x55,
+                    green: 0x55,
+                    blue: 0x55,
+                })
+            }
+            '9' => {
+                style.color = Some(Color {
+                    red: 0x55,
+                    green: 0x55,
+                    blue: 0xff,
+                })
+            }
+            'a' => {
+                style.color = Some(Color {
+                    red: 0x55,
+                    green: 0xff,
+                    blue: 0x55,
+                })
+            }
+            'b' => {
+                style.color = Some(Color {
+                    red: 0x55,
+                    green: 0xff,
+                    blue: 0xff,
+                })
+            }
+            'c' => {
+                style.color = Some(Color {
+                    red: 0xff,
+                    green: 0x55,
+                    blue: 0x55,
+                })
+            }
+            'd' => {
+                style.color = Some(Color {
+                    red: 0xff,
+                    green: 0x55,
+                    blue: 0xff,
+                })
+            }
+            'e' => {
+                style.color = Some(Color {
+                    red: 0xff,
+                    green: 0xff,
+                    blue: 0x55,
+                })
+            }
+            'f' => {
+                style.color = Some(Color {
+                    red: 0xff,
+                    green: 0xff,
+                    blue: 0xff,
+                })
+            }
 
             // Styles
             'k' => style.obfuscated = true, // Obfuscated / Random
@@ -212,23 +313,87 @@ fn apply_styles(str: &str, out: &mut String, style: Style) {
 
 fn parse_color(color: &str) -> Option<Color> {
     match color {
-        "black" =>        Some(Color{ red: 0x00, green: 0x00, blue: 0x00 }),
-        "dark_blue" =>    Some(Color{ red: 0x00, green: 0x00, blue: 0xaa }),
-        "dark_green" =>   Some(Color{ red: 0x00, green: 0xaa, blue: 0x00 }),
-        "dark_aqua" =>    Some(Color{ red: 0x00, green: 0xaa, blue: 0xaa }),
-        "dark_red" =>     Some(Color{ red: 0xaa, green: 0x00, blue: 0x00 }),
-        "dark_purple" =>  Some(Color{ red: 0xaa, green: 0x00, blue: 0xaa }),
-        "gold" =>         Some(Color{ red: 0xff, green: 0xaa, blue: 0x00 }),
-        "gray" =>         Some(Color{ red: 0xaa, green: 0xaa, blue: 0xaa }),
-        "dark_gray" =>    Some(Color{ red: 0x55, green: 0x55, blue: 0x55 }),
-        "blue" =>         Some(Color{ red: 0x55, green: 0x55, blue: 0xff }),
-        "green" =>        Some(Color{ red: 0x55, green: 0xff, blue: 0x55 }),
-        "aqua" =>         Some(Color{ red: 0x55, green: 0xff, blue: 0xff }),
-        "red" =>          Some(Color{ red: 0xff, green: 0x55, blue: 0x55 }),
-        "light_purple" => Some(Color{ red: 0xff, green: 0x55, blue: 0xff }),
-        "yellow" =>       Some(Color{ red: 0xff, green: 0xff, blue: 0x55 }),
-        "white" =>        Some(Color{ red: 0xff, green: 0xff, blue: 0xff }),
-        _ =>              parse_web_color(color)
+        "black" => Some(Color {
+            red: 0x00,
+            green: 0x00,
+            blue: 0x00,
+        }),
+        "dark_blue" => Some(Color {
+            red: 0x00,
+            green: 0x00,
+            blue: 0xaa,
+        }),
+        "dark_green" => Some(Color {
+            red: 0x00,
+            green: 0xaa,
+            blue: 0x00,
+        }),
+        "dark_aqua" => Some(Color {
+            red: 0x00,
+            green: 0xaa,
+            blue: 0xaa,
+        }),
+        "dark_red" => Some(Color {
+            red: 0xaa,
+            green: 0x00,
+            blue: 0x00,
+        }),
+        "dark_purple" => Some(Color {
+            red: 0xaa,
+            green: 0x00,
+            blue: 0xaa,
+        }),
+        "gold" => Some(Color {
+            red: 0xff,
+            green: 0xaa,
+            blue: 0x00,
+        }),
+        "gray" => Some(Color {
+            red: 0xaa,
+            green: 0xaa,
+            blue: 0xaa,
+        }),
+        "dark_gray" => Some(Color {
+            red: 0x55,
+            green: 0x55,
+            blue: 0x55,
+        }),
+        "blue" => Some(Color {
+            red: 0x55,
+            green: 0x55,
+            blue: 0xff,
+        }),
+        "green" => Some(Color {
+            red: 0x55,
+            green: 0xff,
+            blue: 0x55,
+        }),
+        "aqua" => Some(Color {
+            red: 0x55,
+            green: 0xff,
+            blue: 0xff,
+        }),
+        "red" => Some(Color {
+            red: 0xff,
+            green: 0x55,
+            blue: 0x55,
+        }),
+        "light_purple" => Some(Color {
+            red: 0xff,
+            green: 0x55,
+            blue: 0xff,
+        }),
+        "yellow" => Some(Color {
+            red: 0xff,
+            green: 0xff,
+            blue: 0x55,
+        }),
+        "white" => Some(Color {
+            red: 0xff,
+            green: 0xff,
+            blue: 0xff,
+        }),
+        _ => parse_web_color(color),
     }
 }
 
@@ -238,10 +403,10 @@ fn parse_web_color(color: &str) -> Option<Color> {
         // Color in the format of "#RRGGBB", where RR, GG, BB are hexadecimal numbers
         let hexnum = u32::from_str_radix(&color[1..], 16);
         if let Ok(hexnum) = hexnum {
-            return Some(Color{
+            return Some(Color {
                 red: (hexnum >> 16) as u8,
                 green: (hexnum >> 8) as u8,
-                blue: hexnum as u8
+                blue: hexnum as u8,
             });
         }
     }
@@ -288,9 +453,7 @@ mod chat_component_tests {
 
     #[test]
     fn test_parse_empty_object_component() {
-        let text = json!(
-            { }
-        );
+        let text = json!({});
         let expected = "";
         let result = chat_to_str(&text);
         assert_eq!(expected, result);
@@ -406,9 +569,7 @@ mod chat_component_tests {
 
     #[test]
     fn test_parse_empty_array() {
-        let text = json!(
-            []
-        );
+        let text = json!([]);
         let expected = "";
         let result = chat_to_str(&text);
         assert_eq!(expected, result);
@@ -416,9 +577,7 @@ mod chat_component_tests {
 
     #[test]
     fn test_parse_array_of_primitive_types() {
-        let text = json!(
-            [true, false, 45.6]
-        );
+        let text = json!([true, false, 45.6]);
         let expected = "truefalse45.6";
         let result = chat_to_str(&text);
         assert_eq!(expected, result);
@@ -426,12 +585,7 @@ mod chat_component_tests {
 
     #[test]
     fn test_parse_array_of_strings() {
-        let text = json!(
-            [
-                "Hello, ",
-                "world!"
-            ]
-        );
+        let text = json!(["Hello, ", "world!"]);
         let expected = "Hello, world!";
         let result = chat_to_str(&text);
         assert_eq!(expected, result);
@@ -439,16 +593,7 @@ mod chat_component_tests {
 
     #[test]
     fn test_parse_nested_arrays_of_strings() {
-        let text = json!(
-            [
-                [
-                    [
-                        "Hello, ",
-                        "world!"
-                    ]
-                ]
-            ]
-        );
+        let text = json!([[["Hello, ", "world!"]]]);
         let expected = "Hello, world!";
         let result = chat_to_str(&text);
         assert_eq!(expected, result);

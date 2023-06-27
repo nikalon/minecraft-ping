@@ -1,5 +1,5 @@
-use std::io::{Write, Read};
-use serde::{Deserialize};
+use serde::Deserialize;
+use std::io::{Read, Write};
 
 #[derive(Deserialize)]
 pub struct Response {
@@ -12,13 +12,13 @@ pub struct Response {
     pub enforces_secure_chat: Option<bool>,
 
     #[serde(rename = "previewsChat")]
-    pub previews_chat: Option<bool>
+    pub previews_chat: Option<bool>,
 }
 
 #[derive(Deserialize)]
 pub struct ResponseVersion {
     pub name: String,
-    pub protocol: i32
+    pub protocol: i32,
 }
 
 #[derive(Deserialize)]
@@ -33,13 +33,17 @@ pub fn write_var_int<T: Write>(output: &mut T, value: i32) -> Result<(), String>
     const SEGMENT_BITS: u32 = 0b01111111;
     let value: u32 = value as u32;
     for i in 0..5 {
-        let next_value = value >> (i*7);
+        let next_value = value >> (i * 7);
         let segment_data = next_value & SEGMENT_BITS;
         if (next_value & !SEGMENT_BITS) == 0 {
-            output.write_all(&[segment_data as u8]).map_err(|e| e.to_string())?;
+            output
+                .write_all(&[segment_data as u8])
+                .map_err(|e| e.to_string())?;
             return Ok(());
         } else {
-            output.write_all(&[segment_data as u8 | CONTINUE_BIT]).map_err(|e| e.to_string())?;
+            output
+                .write_all(&[segment_data as u8 | CONTINUE_BIT])
+                .map_err(|e| e.to_string())?;
         }
     }
 
@@ -56,7 +60,7 @@ pub fn read_var_int<T: Read>(input: &mut T) -> Result<i32, String> {
     // Read at most five bytes
     for (i, next) in input.take(5).bytes().enumerate() {
         if let Ok(byte) = next {
-            num |= ((byte & SEGMENT_BITS) as u32) << (i*7);
+            num |= ((byte & SEGMENT_BITS) as u32) << (i * 7);
             if byte & CONTINUE_BIT == 0 {
                 return Ok(num as i32);
             }
@@ -74,7 +78,9 @@ pub fn write_string<T: Write>(output: &mut T, value: &str) -> Result<(), String>
     // UTF-8 out of the box.
     let str_len = value.len() as i32;
     write_var_int(output, str_len)?;
-    output.write_all(value.as_bytes()).map_err(|e| e.to_string())?;
+    output
+        .write_all(value.as_bytes())
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -88,7 +94,9 @@ pub fn read_string<T: Read>(input: &mut T) -> Result<String, String> {
 
     // Ensure we read exactly *size* bytes
     let mut utf8_data = vec![0; size as usize];
-    input.read_exact(&mut utf8_data).map_err(|e| e.to_string())?;
+    input
+        .read_exact(&mut utf8_data)
+        .map_err(|e| e.to_string())?;
     let string = String::from_utf8(utf8_data).map_err(|e| e.to_string())?;
     Ok(string)
 }

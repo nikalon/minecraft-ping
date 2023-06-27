@@ -1,11 +1,16 @@
-mod data_types;
 mod chat;
+mod data_types;
 
-use std::{net::{TcpStream, ToSocketAddrs}, io::{Write, Read, BufReader, BufWriter, stderr, stdout}, env::args, time::Instant};
-use std::time::{SystemTime, UNIX_EPOCH};
-use base64::{Engine as _, engine::general_purpose};
-use data_types::*;
+use base64::{engine::general_purpose, Engine as _};
 use colored::Colorize;
+use data_types::*;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    env::args,
+    io::{stderr, stdout, BufReader, BufWriter, Read, Write},
+    net::{TcpStream, ToSocketAddrs},
+    time::Instant,
+};
 
 const MIN_MINECRAFT_PROTOCOL_VERSION: i32 = 0;
 
@@ -14,17 +19,17 @@ struct Arguments {
     raw_response: bool,
     verbose: bool,
     host: String,
-    port: u16
+    port: u16,
 }
 
 impl Arguments {
     fn parse<T: Iterator<Item = String>>(args: &mut T) -> Self {
-        let mut arguments = Arguments{
+        let mut arguments = Arguments {
             get_favicon: false,
             raw_response: false,
             verbose: false,
             host: "".to_owned(),
-            port: 25565
+            port: 25565,
         };
         let args = args.skip(1).collect::<Vec<String>>();
 
@@ -32,9 +37,9 @@ impl Arguments {
         let mut positional_i = 0;
         for (i, arg) in args.iter().enumerate() {
             match arg.as_ref() {
-                "-v" | "--verbose" => { arguments.verbose = true; }
-                "-f" | "--favicon" => { arguments.get_favicon = true; }
-                "-r" | "--raw-response" => { arguments.raw_response = true; }
+                "-v" | "--verbose" => arguments.verbose = true,
+                "-f" | "--favicon" => arguments.get_favicon = true,
+                "-r" | "--raw-response" => arguments.raw_response = true,
                 _ => {
                     positional_i = i;
                     break;
@@ -43,9 +48,10 @@ impl Arguments {
         }
 
         // Required positional argument: hostname
-        arguments.host = args.get(positional_i)
-                             .expect("No address provided")
-                             .to_string();
+        arguments.host = args
+            .get(positional_i)
+            .expect("No address provided")
+            .to_string();
 
         // Optional positional argument: port
         if let Some(port) = args.get(positional_i + 1) {
@@ -59,10 +65,10 @@ impl Arguments {
 fn main() {
     let arguments = Arguments::parse(&mut args());
     let address = (arguments.host.as_ref(), arguments.port)
-                    .to_socket_addrs()
-                    .expect("Invalid host address")
-                    .next()
-                    .expect("Invalid host address");
+        .to_socket_addrs()
+        .expect("Invalid host address")
+        .next()
+        .expect("Invalid host address");
     print_line_verbose("Attempting to connect...", &arguments);
     let tcp_connection = match TcpStream::connect(address) {
         Ok(connection) => connection,
@@ -73,7 +79,10 @@ fn main() {
     };
     let mut buf_reader = BufReader::new(&tcp_connection);
     let mut buf_writer = BufWriter::new(&tcp_connection);
-    print_line_verbose(format!("Connection established to {}", &arguments.host).as_ref(), &arguments);
+    print_line_verbose(
+        format!("Connection established to {}", &arguments.host).as_ref(),
+        &arguments,
+    );
 
     // We need to ensure that we send the hostname (if provided) instead of the IP address because otherwise some servers
     // may not respond at all
@@ -118,7 +127,7 @@ fn main() {
     // Calculate server response time
     let system_time_sec = match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(t) => t.as_secs() as i64,
-        Err(_) => 0
+        Err(_) => 0,
     };
     let start_time = match send_ping_request(&mut buf_writer, system_time_sec) {
         Ok(time) => time,
@@ -145,7 +154,10 @@ fn main() {
 
     let response_elapsed_time = start_time.elapsed();
     print_line_verbose("Received pong response!", &arguments);
-    print_line_verbose(format!("Delay: {} ms", response_elapsed_time.as_millis()).as_ref(), &arguments);
+    print_line_verbose(
+        format!("Delay: {} ms", response_elapsed_time.as_millis()).as_ref(),
+        &arguments,
+    );
     print_line_verbose("Disconnected", &arguments);
 
     if arguments.get_favicon {
@@ -155,10 +167,13 @@ fn main() {
             if favicon.starts_with(FORMAT) {
                 let mut buf = Vec::with_capacity(favicon.len());
                 // Delete prefix and decode the image as Base64
-                let result = favicon.strip_prefix(FORMAT)
-                                    .and_then(|favicon| Some(favicon.as_bytes()))
-                                    .and_then(|favicon| general_purpose::STANDARD.decode_vec(favicon, &mut buf).ok())
-                                    .and_then(|_| Some(stdout().write_all(&buf)));
+                let result = favicon
+                    .strip_prefix(FORMAT)
+                    .and_then(|favicon| Some(favicon.as_bytes()))
+                    .and_then(|favicon| {
+                        general_purpose::STANDARD.decode_vec(favicon, &mut buf).ok()
+                    })
+                    .and_then(|_| Some(stdout().write_all(&buf)));
                 if result.is_none() {
                     eprintln!("Error: Could not decode favicon")
                 }
@@ -167,7 +182,10 @@ fn main() {
                 let _ = stdout().write_all(favicon.as_bytes());
             }
         } else {
-            eprintln!("{}", "WARNING: This server doesn't have a favicon.".yellow());
+            eprintln!(
+                "{}",
+                "WARNING: This server doesn't have a favicon.".yellow()
+            );
         }
     } else if arguments.raw_response {
         // Print raw response data
@@ -177,8 +195,13 @@ fn main() {
         let server_description = chat::chat_to_str(&server_response.description);
         println!("{}", server_description);
         println!("{:>24}: {}", "Server version", server_response.version.name);
-        println!("{:>24}: {}", "Protocol",server_response.version.protocol);
-        println!("{:>24}: {current}/{max}", "Players", current=server_response.players.online, max=server_response.players.max);
+        println!("{:>24}: {}", "Protocol", server_response.version.protocol);
+        println!(
+            "{:>24}: {current}/{max}",
+            "Players",
+            current = server_response.players.online,
+            max = server_response.players.max
+        );
 
         let favicon = if let Some(f) = server_response.favicon {
             if f.is_empty() {
@@ -205,7 +228,11 @@ fn main() {
         };
         println!("{:>24}: {previews_chat}", "Previews chat");
 
-        println!("{:>24}: {} ms", "Server latency", response_elapsed_time.as_millis());
+        println!(
+            "{:>24}: {} ms",
+            "Server latency",
+            response_elapsed_time.as_millis()
+        );
     }
 }
 
@@ -273,7 +300,9 @@ fn read_status_response<T: Read>(input: &mut T) -> Result<String, String> {
     // Packet ID
     let packet_id = read_var_int(&mut input)?;
     if packet_id != 0 {
-        return Err(format!("Error: The server responded with an unknown packet ID: 0x{packet_id:x}"));
+        return Err(format!(
+            "Error: The server responded with an unknown packet ID: 0x{packet_id:x}"
+        ));
     }
 
     // JSON response
@@ -300,7 +329,9 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     // Packet ID
     let packet_id = read_var_int(&mut input)?;
     if packet_id != 1 {
-        return Err(format!("Error: The server responded with an unknown packet ID: 0x{packet_id:x}"));
+        return Err(format!(
+            "Error: The server responded with an unknown packet ID: 0x{packet_id:x}"
+        ));
     }
 
     // Payload
