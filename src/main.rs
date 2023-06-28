@@ -308,9 +308,10 @@ fn read_status_response<T: Read>(input: &mut T) -> Result<String, String> {
     // JSON response
     let server_info = read_string(&mut input);
 
-    // Checks if all bytes were read. If it didn't we probably screwed up somewhere.
-    if input.bytes().count() != 0 {
-        return Err("ERROR: There are still some bytes to read in the current packet".to_owned());
+    // Check if all bytes were read successfully
+    let bytes_read = input.bytes().count();
+    if bytes_read != 0 {
+        return Err(format!("ERROR: could not deserialize packet. Packet length is {packet_length}, but we processed {bytes_read} bytes instead."));
     }
 
     server_info
@@ -337,9 +338,10 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     // Payload
     let payload = read_long(&mut input)?;
 
-    // Checks if all bytes were read. If it didn't we probably screwed up somewhere.
-    if input.bytes().count() != 0 {
-        return Err("ERROR: There are still some bytes to read in the current packet".to_owned());
+    // Check if all bytes were read successfully
+    let bytes_read = input.bytes().count();
+    if bytes_read != 0 {
+        return Err(format!("ERROR: could not deserialize packet. Packet length is {packet_length}, but we processed {bytes_read} bytes instead."));
     }
 
     Ok(payload)

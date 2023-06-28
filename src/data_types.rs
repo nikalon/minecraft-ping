@@ -76,8 +76,8 @@ pub fn read_var_int<T: Read>(input: &mut T) -> Result<i32, String> {
 pub fn write_string<T: Write>(output: &mut T, value: &str) -> Result<(), String> {
     // UTF-8 string prefixed with a size as a VarInt. We will use the built-in String data type as it already supports
     // UTF-8 out of the box.
-    let str_len = value.len() as i32;
-    write_var_int(output, str_len)?;
+    let size = i32::try_from(value.len()).map_err(|_| "could not write String because its length exceeds the maximum size that can be represented as a VarInt".to_owned())?;
+    write_var_int(output, size)?;
     output
         .write_all(value.as_bytes())
         .map_err(|e| e.to_string())?;
@@ -88,12 +88,12 @@ pub fn read_string<T: Read>(input: &mut T) -> Result<String, String> {
     // UTF-8 string prefixed with a size as a VarInt. We will use the built-in String data type as it already supports
     // UTF-8 out of the box.
     let size = read_var_int(input)?;
-    if size < 0 {
-        return Err(format!("Invalid String size: {size}"));
-    }
+    let size: usize = size
+        .try_into()
+        .map_err(|_| format!("Invalid String size {size}"))?;
 
     // Ensure we read exactly *size* bytes
-    let mut utf8_data = vec![0; size as usize];
+    let mut utf8_data = vec![0; size];
     input
         .read_exact(&mut utf8_data)
         .map_err(|e| e.to_string())?;

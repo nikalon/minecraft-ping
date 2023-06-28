@@ -23,7 +23,7 @@ impl From<Color> for colored::Color {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 struct Style {
     bold: bool,
     italic: bool,
@@ -31,19 +31,6 @@ struct Style {
     strikethrough: bool,
     obfuscated: bool,
     color: Option<Color>,
-}
-
-impl Style {
-    fn default() -> Self {
-        Style {
-            bold: false,
-            italic: false,
-            underline: false,
-            strikethrough: false,
-            obfuscated: false,
-            color: None,
-        }
-    }
 }
 
 fn parse_component(text: &Value) -> String {
