@@ -1,6 +1,8 @@
+mod arguments;
 mod chat;
 mod data_types;
 
+use arguments::CommandLineArguments;
 use base64::{engine::general_purpose, Engine as _};
 use colored::Colorize;
 use data_types::*;
@@ -14,56 +16,15 @@ use std::{
 
 const MIN_MINECRAFT_PROTOCOL_VERSION: i32 = 0;
 
-struct Arguments {
-    get_favicon: bool,
-    raw_response: bool,
-    verbose: bool,
-    host: String,
-    port: u16,
-}
-
-impl Arguments {
-    fn parse<T: Iterator<Item = String>>(args: &mut T) -> Self {
-        let mut arguments = Arguments {
-            get_favicon: false,
-            raw_response: false,
-            verbose: false,
-            host: "".to_owned(),
-            port: 25565,
-        };
-        let args = args.skip(1).collect::<Vec<String>>();
-
-        // Parse optional flags
-        let mut positional_i = 0;
-        for (i, arg) in args.iter().enumerate() {
-            match arg.as_ref() {
-                "-v" | "--verbose" => arguments.verbose = true,
-                "-f" | "--favicon" => arguments.get_favicon = true,
-                "-r" | "--raw-response" => arguments.raw_response = true,
-                _ => {
-                    positional_i = i;
-                    break;
-                }
-            }
-        }
-
-        // Required positional argument: hostname
-        arguments.host = args
-            .get(positional_i)
-            .expect("No address provided")
-            .to_string();
-
-        // Optional positional argument: port
-        if let Some(port) = args.get(positional_i + 1) {
-            arguments.port = port.parse().expect("Invalid port");
-        }
-
-        arguments
-    }
-}
-
 fn main() {
-    let arguments = Arguments::parse(&mut args());
+    let arguments = match CommandLineArguments::parse(&mut args()) {
+        Ok(args) => args,
+        Err(e) => {
+            // TODO: Print usage or implement -h flag
+            eprintln!("{e}");
+            return;
+        }
+    };
     let address = (arguments.host.as_ref(), arguments.port)
         .to_socket_addrs()
         .expect("Invalid host address")
@@ -169,11 +130,9 @@ fn main() {
                 // Delete prefix and decode the image as Base64
                 let result = favicon
                     .strip_prefix(FORMAT)
-                    .and_then(|favicon| Some(favicon.as_bytes()))
-                    .and_then(|favicon| {
-                        general_purpose::STANDARD.decode_vec(favicon, &mut buf).ok()
-                    })
-                    .and_then(|_| Some(stdout().write_all(&buf)));
+                    .map(|favicon| favicon.as_bytes())
+                    .map(|favicon| general_purpose::STANDARD.decode_vec(favicon, &mut buf))
+                    .map(|_| stdout().write_all(&buf));
                 if result.is_none() {
                     eprintln!("Error: Could not decode favicon")
                 }
@@ -347,7 +306,7 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     Ok(payload)
 }
 
-fn print_line_verbose(msg: &str, arguments: &Arguments) {
+fn print_line_verbose(msg: &str, arguments: &CommandLineArguments) {
     if arguments.verbose {
         let _ = stderr().write_all(msg.as_bytes());
         let _ = stderr().write_all("\n".as_bytes());
