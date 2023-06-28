@@ -268,9 +268,9 @@ fn read_status_response<T: Read>(input: &mut T) -> Result<String, String> {
     let server_info = read_string(&mut input);
 
     // Check if all bytes were read successfully
-    let bytes_read = input.bytes().count();
-    if bytes_read != 0 {
-        return Err(format!("ERROR: could not deserialize packet. Packet length is {packet_length}, but we processed {bytes_read} bytes instead."));
+    let bytes_left = input.bytes().count();
+    if bytes_left != 0 {
+        return Err(format!("ERROR: could not deserialize packet. Packet length is {packet_length}, but we only processed {} bytes.", packet_length - bytes_left as i32));
     }
 
     server_info
@@ -298,9 +298,9 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     let payload = read_long(&mut input)?;
 
     // Check if all bytes were read successfully
-    let bytes_read = input.bytes().count();
-    if bytes_read != 0 {
-        return Err(format!("ERROR: could not deserialize packet. Packet length is {packet_length}, but we processed {bytes_read} bytes instead."));
+    let bytes_left = input.bytes().count();
+    if bytes_left != 0 {
+        return Err(format!("ERROR: could not deserialize packet. Packet length is {packet_length}, but we only processed {} bytes.", packet_length - bytes_left as i32));
     }
 
     Ok(payload)
