@@ -6,6 +6,7 @@ use arguments::CommandLineArguments;
 use base64::{engine::general_purpose, Engine as _};
 use colored::Colorize;
 use data_types::*;
+use std::process::{ExitCode, Termination};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     env::args,
@@ -16,13 +17,27 @@ use std::{
 
 const MIN_MINECRAFT_PROTOCOL_VERSION: i32 = 0;
 
-fn main() {
+// Error codes based on BSD sysexits (https://man.freebsd.org/cgi/man.cgi?query=sysexits&apropos=0&sektion=0&manpath=FreeBSD+11.2-stable&arch=default&format=html)
+enum ErrorCode {
+    Ok = 0,
+    IncorrectParameters = 65,
+    HostDoesNotExist = 68,
+    Protocol = 76
+}
+
+impl Termination for ErrorCode {
+    fn report(self) -> ExitCode {
+        ExitCode::from(self as u8)
+    }
+}
+
+fn main() -> ErrorCode {
     let arguments = match CommandLineArguments::parse(&mut args()) {
         Ok(args) => args,
         Err(e) => {
             // TODO: Print usage or implement -h flag
             eprintln!("{e}");
-            return;
+            return ErrorCode::IncorrectParameters;
         }
     };
     let address = (arguments.host.as_ref(), arguments.port)
@@ -33,7 +48,7 @@ fn main() {
         Some(addr) => addr,
         None => {
             eprintln!("Invalid address \'{}\'", arguments.host);
-            return;
+            return ErrorCode::IncorrectParameters;
         }
     };
 
@@ -42,7 +57,7 @@ fn main() {
         Ok(connection) => connection,
         Err(_) => {
             eprintln!("Could not connect to server");
-            return;
+            return ErrorCode::HostDoesNotExist;
         }
     };
     let mut buf_reader = BufReader::new(&tcp_connection);
@@ -59,7 +74,7 @@ fn main() {
         Err(e) => {
             eprintln!("Error: Could not send handshake");
             eprintln!("More details: {e}");
-            return;
+            return ErrorCode::Protocol;
         }
     };
     print_line_verbose("Handshake request sent!", &arguments);
@@ -69,7 +84,7 @@ fn main() {
         Err(e) => {
             eprintln!("Error: Could not send status request");
             eprintln!("More details: {e}");
-            return;
+            return ErrorCode::Protocol;
         }
     };
     print_line_verbose("Status request sent!", &arguments);
@@ -79,7 +94,7 @@ fn main() {
         Err(e) => {
             eprintln!("Error: Could not read status response");
             eprintln!("More details: {e}");
-            return;
+            return ErrorCode::Protocol;
         }
     };
     print_line_verbose("Received status response!", &arguments);
@@ -88,7 +103,7 @@ fn main() {
         Err(e) => {
             eprintln!("Error: Could not decode response because it has malformed JSON data");
             eprintln!("More details: {e}");
-            return;
+            return ErrorCode::Protocol;
         }
     };
 
@@ -102,7 +117,7 @@ fn main() {
         Err(e) => {
             eprintln!("Error: Could not send ping request");
             eprintln!("More details: {e}");
-            return;
+            return ErrorCode::Protocol;
         }
     };
     print_line_verbose("Sent ping request!", &arguments);
@@ -112,12 +127,12 @@ fn main() {
         Err(e) => {
             eprintln!("Error: Could not read pong response");
             eprintln!("More details: {e}");
-            return;
+            return ErrorCode::Protocol;
         }
     };
     if payload != system_time_sec {
         eprintln!("Error: the server's pong response is an invalid value: 0x{payload:x}. Sent: 0x{system_time_sec:x}");
-        return;
+        return ErrorCode::Protocol;
     }
 
     let response_elapsed_time = start_time.elapsed();
@@ -200,6 +215,8 @@ fn main() {
             response_elapsed_time.as_millis()
         );
     }
+
+    ErrorCode::Ok
 }
 
 fn send_handshake<T: Write>(output: &mut T, server_address: &str, port: u16) -> Result<(), String> {
