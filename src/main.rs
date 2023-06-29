@@ -27,9 +27,16 @@ fn main() {
     };
     let address = (arguments.host.as_ref(), arguments.port)
         .to_socket_addrs()
-        .expect("Invalid host address")
-        .next()
-        .expect("Invalid host address");
+        .ok()
+        .and_then(|mut addr| addr.next());
+    let address = match address {
+        Some(addr) => addr,
+        None => {
+            eprintln!("Invalid address \'{}\'", arguments.host);
+            return;
+        }
+    };
+
     print_line_verbose("Attempting to connect...", &arguments);
     let tcp_connection = match TcpStream::connect(address) {
         Ok(connection) => connection,

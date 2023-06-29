@@ -131,167 +131,165 @@ mod var_int_tests {
     #[test]
     fn test_write_var_int_0() {
         const WRITE_VALUE: i32 = 0;
-        const EXPECTED_VALUE: &[u8] = &[0x0];
+        let expected = &[0x0];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_0() {
         let mut bytes: &[u8] = &[0x0];
-        const EXPECTED_VALUE: i32 = 0;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(0);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_1() {
         const WRITE_VALUE: i32 = 1;
-        const EXPECTED_VALUE: &[u8] = &[0x1];
+        let expected = &[0x1];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_1() {
         let mut bytes: &[u8] = &[0x1];
-        const EXPECTED_VALUE: i32 = 1;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(1);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_127() {
         const WRITE_VALUE: i32 = 127;
-        const EXPECTED_VALUE: &[u8] = &[0x7F];
+        let expected = &[0x7F];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_127() {
         let mut bytes: &[u8] = &[0x7F];
-        const EXPECTED_VALUE: i32 = 127;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(127);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_128() {
         const WRITE_VALUE: i32 = 128;
-        const EXPECTED_VALUE: &[u8] = &[0x80, 0x01];
+        let expected = &[0x80, 0x01];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_128() {
         let mut bytes: &[u8] = &[0x80, 0x01];
-        const EXPECTED_VALUE: i32 = 128;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(128);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_25565() {
         const WRITE_VALUE: i32 = 25565;
-        const EXPECTED_VALUE: &[u8] = &[0xDD, 0xC7, 0x01];
+        let expected = &[0xDD, 0xC7, 0x01];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_25565() {
         let mut bytes: &[u8] = &[0xDD, 0xC7, 0x01];
-        const EXPECTED_VALUE: i32 = 25565;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(25565);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_2147483647() {
         const WRITE_VALUE: i32 = 2147483647;
-        const EXPECTED_VALUE: &[u8] = &[0xFF, 0xFF, 0xFF, 0xFF, 0x07];
+        let expected = &[0xFF, 0xFF, 0xFF, 0xFF, 0x07];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_2147483647() {
         let mut bytes: &[u8] = &[0xFF, 0xFF, 0xFF, 0xFF, 0x07];
-        const EXPECTED_VALUE: i32 = 2147483647;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(2147483647);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_negative_1() {
         const WRITE_VALUE: i32 = -1;
-        const EXPECTED_VALUE: &[u8] = &[0xFF, 0xFF, 0xFF, 0xFF, 0x0F];
+        let expected = &[0xFF, 0xFF, 0xFF, 0xFF, 0x0F];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_negative_1() {
         let mut bytes: &[u8] = &[0xFF, 0xFF, 0xFF, 0xFF, 0x0F];
-        const EXPECTED_VALUE: i32 = -1;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(-1);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
     fn test_write_var_int_negative_2147483648() {
         const WRITE_VALUE: i32 = -2147483648;
-        const EXPECTED_VALUE: &[u8] = &[0x80, 0x80, 0x80, 0x80, 0x08];
+        let expected = &[0x80, 0x80, 0x80, 0x80, 0x08];
 
         let mut buffer: Vec<u8> = Vec::with_capacity(10);
-        write_var_int(&mut buffer, WRITE_VALUE).unwrap();
-        assert_eq!(buffer.len(), EXPECTED_VALUE.len());
-        assert_eq!(&buffer, EXPECTED_VALUE);
+        assert!(write_var_int(&mut buffer, WRITE_VALUE).is_ok());
+        assert_eq!(buffer.len(), expected.len());
+        assert_eq!(&buffer, expected);
     }
 
     #[test]
     fn test_read_var_int_negative_2147483648() {
         let mut bytes: &[u8] = &[0x80, 0x80, 0x80, 0x80, 0x08];
-        const EXPECTED_VALUE: i32 = -2147483648;
-        let read_value = read_var_int(&mut bytes).unwrap();
-        assert_eq!(read_value, EXPECTED_VALUE);
+        let expected = Ok(-2147483648);
+        let read_value = read_var_int(&mut bytes);
+        assert_eq!(read_value, expected);
     }
 
     #[test]
-    #[should_panic]
     fn test_invalid_var_int_too_long() {
         let mut bytes: &[u8] = &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
-        read_var_int(&mut bytes).unwrap();
+        assert!(read_var_int(&mut bytes).is_err());
     }
 
     #[test]
-    #[should_panic]
     fn test_invalid_var_int_insufficient_data() {
         let mut bytes: &[u8] = &[0xFF];
-        read_var_int(&mut bytes).unwrap();
+        assert!(read_var_int(&mut bytes).is_err());
     }
 }
 
@@ -305,7 +303,7 @@ mod string_tests {
         let expected = &[0x0];
 
         let mut buffer: Vec<u8> = vec![];
-        write_string(&mut buffer, string).unwrap();
+        assert!(write_string(&mut buffer, string).is_ok());
         assert_eq!(buffer, expected);
     }
 
@@ -316,7 +314,7 @@ mod string_tests {
         let expected = &[0x4, 0x61, 0x62, 0x63, 0x64];
 
         let mut buffer: Vec<u8> = vec![];
-        write_string(&mut buffer, string).unwrap();
+        assert!(write_string(&mut buffer, string).is_ok());
         assert_eq!(buffer, expected);
     }
 }

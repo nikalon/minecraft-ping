@@ -24,8 +24,10 @@ impl CommandLineArguments {
         let flags_iter = args.by_ref();
         while let Some(flag) = flags_iter.peek() {
             if flag.starts_with('-') {
-                // Consume the next item to advance the iterator
-                let flag = flags_iter.next().unwrap(); // TODO: Remove unwrap()
+                // Consume the next item to advance the iterator.
+                // Note: flags_iter.next() should never be None because we already know by peeking the iterator that
+                // there's another item to process.
+                let flag = flags_iter.next().ok_or(String::from("Invalid flags"))?;
                 match flag.as_ref() {
                     "-v" | "--verbose" => arguments.verbose = true,
                     "-f" | "--favicon" => arguments.get_favicon = true,
@@ -48,7 +50,7 @@ impl CommandLineArguments {
         if let Some(port) = args.next() {
             arguments.port = port
                 .parse()
-                .map_err(|_| format!("Invalid port \"{port}\""))?;
+                .map_err(|_| format!("Invalid port \'{port}\'"))?;
         }
 
         // There should be no more arguments to parse
