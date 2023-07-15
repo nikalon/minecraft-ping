@@ -11,7 +11,6 @@ use std::{
     env::args,
     io::{stderr, stdout, BufReader, BufWriter, IsTerminal, Read, Write},
     net::{TcpStream, ToSocketAddrs},
-    os::windows::io::AsHandle,
     time::Instant,
 };
 
@@ -346,16 +345,16 @@ fn print_warning(msg: &str) {
 }
 
 fn can_print_colors() -> bool {
-    // Determines whether we should show ANSI colors and other font styles or not. Based on http://bixense.com/clicolors/
-    let no_color_set = std::env::var("NO_COLOR").map_or(false, |v| v == "1");
-    if no_color_set {
-        return false;
-    }
+        // Determines whether we should show ANSI colors and other font styles or not. Based on http://bixense.com/clicolors/
+        let no_color_set = std::env::var("NO_COLOR").map_or(false, |v| v == "1");
+        if no_color_set {
+            return false;
+        }
 
-    let clicolor_force_set = std::env::var("CLICOLOR_FORCE").map_or(false, |v| v == "1");
-    if clicolor_force_set {
-        return true;
-    }
+        let clicolor_force_set = std::env::var("CLICOLOR_FORCE").map_or(false, |v| v == "1");
+        if clicolor_force_set {
+            return true;
+        }
 
-    std::io::stdout().as_handle().is_terminal()
+        return std::io::stdout().is_terminal();
 }

@@ -167,7 +167,7 @@ fn apply_styles(str: &str, out: &mut String, style: Style, actually_apply_styles
         }
 
         out.push_str(string_to_style.as_ref());
-        // NOTE: We should only reset styles only if we encounter the 'r' character or we stop using the old style system
+        // NOTE: We should only reset styles if we encounter the 'r' character or we stop using the old style system
     }
 
     if actually_apply_styles {
