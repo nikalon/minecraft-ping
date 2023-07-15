@@ -1,9 +1,15 @@
-use colored::Colorize;
 use serde_json::Value;
 
-pub fn chat_to_str(text: &Value) -> String {
+const RESET_STYLES: &str = "\x1B[0m";
+const BOLD: &str = "\x1B[1m";
+const ITALIC: &str = "\x1B[3m";
+const UNDERLINE: &str = "\x1B[4m";
+const SLOW_BLINK: &str = "\x1B[5m";
+const STRIKETHROUGH: &str = "\x1B[9m";
+
+pub fn chat_to_str(text: &Value, apply_styles: bool) -> String {
     // Parse text as a JSON chat object and apply font styles
-    parse_component(text)
+    parse_component(text, apply_styles)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -11,16 +17,6 @@ struct Color {
     red: u8,
     green: u8,
     blue: u8,
-}
-
-impl From<Color> for colored::Color {
-    fn from(value: Color) -> Self {
-        colored::Color::TrueColor {
-            r: value.red,
-            g: value.green,
-            b: value.blue,
-        }
-    }
 }
 
 #[derive(Copy, Clone, Default)]
@@ -33,7 +29,7 @@ struct Style {
     color: Option<Color>,
 }
 
-fn parse_component(text: &Value) -> String {
+fn parse_component(text: &Value, actually_apply_styles: bool) -> String {
     let mut str = String::new();
 
     // Parse all components recursively and implement style inheritance for the current system (doesn't apply for the old system)
@@ -41,7 +37,7 @@ fn parse_component(text: &Value) -> String {
     while let Some((comp, style)) = components.pop() {
         match comp {
             Value::Null => {} // Null is ignored
-            Value::String(t) => apply_styles(t, &mut str, style),
+            Value::String(t) => apply_styles(t, &mut str, style, actually_apply_styles),
             Value::Object(chat_object) => {
                 // Set styles for this component
                 let mut style = style;
@@ -71,7 +67,7 @@ fn parse_component(text: &Value) -> String {
 
                 // Parse string
                 if let Some(Value::String(s)) = &chat_object.get("text") {
-                    apply_styles(s, &mut str, style);
+                    apply_styles(s, &mut str, style, actually_apply_styles);
                 }
 
                 // Parse sibling components. If the "extra" property is not an array we ignore it.
@@ -86,216 +82,111 @@ fn parse_component(text: &Value) -> String {
                     components.push((sibling, style));
                 }
             }
-            t => apply_styles(&t.to_string(), &mut str, style), // Convert booleans and numbers into a string
+            t => apply_styles(&t.to_string(), &mut str, style, actually_apply_styles), // Convert booleans and numbers into a string
         }
     }
     str
 }
 
-fn apply_styles(str: &str, out: &mut String, style: Style) {
-    // TODO: We are allocating a lot of memory in this function unnecessarily because I haven't found a way to use the API
-    // efficiently. Maybe I should drop the 'colored' crate and implement ANSI colors myself? Could be easier, idk.
-
-    let mut str_iter = str.chars();
-
+fn apply_styles(str: &str, out: &mut String, style: Style, actually_apply_styles: bool) {
     // Apply formatting using the current style inheritance system. Override styles from the parent style if needed.
-    let mut styled_string = str_iter
-        .by_ref()
-        .take_while(|c| *c != '§')
-        .collect::<String>()
-        .normal()
-        .clear();
+    let mut str_iter = str.chars();
+    let string_to_style: String = str_iter.by_ref().take_while(|c| *c != '§').collect();
 
-    if style.bold {
-        styled_string = styled_string.bold();
+    if actually_apply_styles {
+        if let Some(color) = style.color {
+            let red = color.red.to_string();
+            let green = color.green.to_string();
+            let blue = color.blue.to_string();
+            push_ansi_color_sequence(out, &red, &green, &blue);
+        }
+
+        if style.bold {
+            out.push_str(BOLD);
+        }
+
+        if style.italic {
+            out.push_str(ITALIC);
+        }
+
+        if style.underline {
+            out.push_str(UNDERLINE);
+        }
+
+        if style.strikethrough {
+            out.push_str(STRIKETHROUGH);
+        }
+
+        if style.obfuscated {
+            // ANSI colors doesn't support showing random text, so we blink it instead. Better than nothing, I guess...
+            out.push_str(SLOW_BLINK);
+        }
     }
 
-    if style.italic {
-        styled_string = styled_string.italic();
+    out.push_str(&string_to_style);
+    if actually_apply_styles {
+        out.push_str(RESET_STYLES);
     }
-
-    if style.underline {
-        styled_string = styled_string.underline();
-    }
-
-    if style.strikethrough {
-        styled_string = styled_string.strikethrough();
-    }
-
-    if style.obfuscated {
-        styled_string = styled_string.blink();
-    }
-
-    if let Some(color) = style.color {
-        styled_string = styled_string.color(color);
-    }
-
-    out.push_str(styled_string.to_string().as_ref());
 
     // Apply formatting using the old system. This system takes precedence over the current system and doesn't participate
     // in the style inheritance system, so any styles applied here don't propagate to child components.
     // The way this old system work is very similar to ANSI colors in terminals. It will apply a style based on a control
     // sequence until it finds a reset sequence. It is possible to apply multiple styles at once.
-    let mut style = Style::default();
     while let Some(control_sequence) = str_iter.next() {
-        let mut styled_string = str_iter
-            .by_ref()
-            .take_while(|c| *c != '§')
-            .collect::<String>()
-            .normal()
-            .clear();
-        match control_sequence {
-            // Colors
-            '0' => {
-                style.color = Some(Color {
-                    red: 0x00,
-                    green: 0x00,
-                    blue: 0x00,
-                })
-            }
-            '1' => {
-                style.color = Some(Color {
-                    red: 0x00,
-                    green: 0x00,
-                    blue: 0xaa,
-                })
-            }
-            '2' => {
-                style.color = Some(Color {
-                    red: 0x00,
-                    green: 0xaa,
-                    blue: 0x00,
-                })
-            }
-            '3' => {
-                style.color = Some(Color {
-                    red: 0x00,
-                    green: 0xaa,
-                    blue: 0xaa,
-                })
-            }
-            '4' => {
-                style.color = Some(Color {
-                    red: 0xaa,
-                    green: 0x00,
-                    blue: 0x00,
-                })
-            }
-            '5' => {
-                style.color = Some(Color {
-                    red: 0xaa,
-                    green: 0x00,
-                    blue: 0xaa,
-                })
-            }
-            '6' => {
-                style.color = Some(Color {
-                    red: 0xff,
-                    green: 0xaa,
-                    blue: 0x00,
-                })
-            }
-            '7' => {
-                style.color = Some(Color {
-                    red: 0xaa,
-                    green: 0xaa,
-                    blue: 0xaa,
-                })
-            }
-            '8' => {
-                style.color = Some(Color {
-                    red: 0x55,
-                    green: 0x55,
-                    blue: 0x55,
-                })
-            }
-            '9' => {
-                style.color = Some(Color {
-                    red: 0x55,
-                    green: 0x55,
-                    blue: 0xff,
-                })
-            }
-            'a' => {
-                style.color = Some(Color {
-                    red: 0x55,
-                    green: 0xff,
-                    blue: 0x55,
-                })
-            }
-            'b' => {
-                style.color = Some(Color {
-                    red: 0x55,
-                    green: 0xff,
-                    blue: 0xff,
-                })
-            }
-            'c' => {
-                style.color = Some(Color {
-                    red: 0xff,
-                    green: 0x55,
-                    blue: 0x55,
-                })
-            }
-            'd' => {
-                style.color = Some(Color {
-                    red: 0xff,
-                    green: 0x55,
-                    blue: 0xff,
-                })
-            }
-            'e' => {
-                style.color = Some(Color {
-                    red: 0xff,
-                    green: 0xff,
-                    blue: 0x55,
-                })
-            }
-            'f' => {
-                style.color = Some(Color {
-                    red: 0xff,
-                    green: 0xff,
-                    blue: 0xff,
-                })
-            }
+        let string_to_style: String = str_iter.by_ref().take_while(|c| *c != '§').collect();
+        if actually_apply_styles {
+            match control_sequence {
+                // Colors
+                '0' => push_ansi_color_sequence(out, "0", "0", "0"),
+                '1' => push_ansi_color_sequence(out, "0", "0", "170"),
+                '2' => push_ansi_color_sequence(out, "0", "170", "0"),
+                '3' => push_ansi_color_sequence(out, "0", "170", "170"),
+                '4' => push_ansi_color_sequence(out, "170", "0", "0"),
+                '5' => push_ansi_color_sequence(out, "170", "0", "170"),
+                '6' => push_ansi_color_sequence(out, "255", "170", "0"),
+                '7' => push_ansi_color_sequence(out, "170", "170", "170"),
+                '8' => push_ansi_color_sequence(out, "85", "85", "85"),
+                '9' => push_ansi_color_sequence(out, "85", "85", "255"),
+                'a' => push_ansi_color_sequence(out, "85", "255", "85"),
+                'b' => push_ansi_color_sequence(out, "85", "255", "255"),
+                'c' => push_ansi_color_sequence(out, "255", "85", "85"),
+                'd' => push_ansi_color_sequence(out, "255", "85", "255"),
+                'e' => push_ansi_color_sequence(out, "255", "255", "85"),
+                'f' => push_ansi_color_sequence(out, "255", "255", "255"),
 
-            // Styles
-            'k' => style.obfuscated = true, // Obfuscated / Random
-            'l' => style.bold = true,
-            'm' => style.strikethrough = true,
-            'n' => style.underline = true,
-            'o' => style.italic = true,
-            'r' => style = Style::default(), // Reset
+                // Styles
+                'k' => out.push_str(SLOW_BLINK), // Obfuscated
+                'l' => out.push_str(BOLD),
+                'm' => out.push_str(STRIKETHROUGH),
+                'n' => out.push_str(UNDERLINE),
+                'o' => out.push_str(ITALIC),
+                'r' => out.push_str(RESET_STYLES),
 
-            _ => {}
-        };
-
-        if style.bold {
-            styled_string = styled_string.bold();
+                _ => {}
+            };
         }
 
-        if style.italic {
-            styled_string = styled_string.italic();
-        }
-
-        if style.underline {
-            styled_string = styled_string.underline();
-        }
-
-        if style.strikethrough {
-            styled_string = styled_string.strikethrough();
-        }
-
-        if style.obfuscated {
-            styled_string = styled_string.blink();
-        }
-
-        if let Some(color) = style.color {
-            styled_string = styled_string.color(color);
-        }
-
-        out.push_str(styled_string.to_string().as_ref());
+        out.push_str(string_to_style.as_ref());
+        // NOTE: We should only reset styles only if we encounter the 'r' character or we stop using the old style system
     }
+
+    if actually_apply_styles {
+        out.push_str(RESET_STYLES);
+    }
+}
+
+fn push_ansi_color_sequence(out: &mut String, red: &str, green: &str, blue: &str) {
+    // Using 24-bit colors in the format of "38;2;R;G;B", where R, G and B are decimal values in the range of [0-255]
+    out.push_str("\x1B[38;2;");
+
+    out.push_str(red);
+    out.push(';');
+
+    out.push_str(green);
+    out.push(';');
+
+    out.push_str(blue);
+    out.push('m');
 }
 
 fn parse_color(color: &str) -> Option<Color> {
@@ -406,11 +297,13 @@ mod chat_component_tests {
     use super::*;
     use serde_json::json;
 
+    const APPLY_FONT_STYLES: bool = false;
+
     #[test]
     fn test_parse_null() {
         let text = json!(null);
         let expected = "";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -418,7 +311,7 @@ mod chat_component_tests {
     fn test_parse_boolean() {
         let text = json!(true);
         let expected = "true";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -426,7 +319,7 @@ mod chat_component_tests {
     fn test_parse_number() {
         let text = json!(23.4);
         let expected = "23.4";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -434,7 +327,7 @@ mod chat_component_tests {
     fn test_parse_string() {
         let text = json!("THIS IS TEXT");
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -442,7 +335,7 @@ mod chat_component_tests {
     fn test_parse_empty_object_component() {
         let text = json!({});
         let expected = "";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -454,7 +347,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -474,7 +367,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -496,7 +389,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -521,7 +414,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS SOME TEXT";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -535,7 +428,7 @@ mod chat_component_tests {
             }
         );
         let expected = "";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -550,7 +443,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS A";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -558,7 +451,7 @@ mod chat_component_tests {
     fn test_parse_empty_array() {
         let text = json!([]);
         let expected = "";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -566,7 +459,7 @@ mod chat_component_tests {
     fn test_parse_array_of_primitive_types() {
         let text = json!([true, false, 45.6]);
         let expected = "truefalse45.6";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -574,7 +467,7 @@ mod chat_component_tests {
     fn test_parse_array_of_strings() {
         let text = json!(["Hello, ", "world!"]);
         let expected = "Hello, world!";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -582,7 +475,7 @@ mod chat_component_tests {
     fn test_parse_nested_arrays_of_strings() {
         let text = json!([[["Hello, ", "world!"]]]);
         let expected = "Hello, world!";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -596,7 +489,7 @@ mod chat_component_tests {
             ]
         );
         let expected = "Hello, world!";
-        let result = chat_to_str(&text);
+        let result = chat_to_str(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 }

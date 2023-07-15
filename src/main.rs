@@ -4,25 +4,27 @@ mod data_types;
 
 use arguments::CommandLineArguments;
 use base64::{engine::general_purpose, Engine as _};
-use colored::Colorize;
 use data_types::*;
 use std::process::{ExitCode, Termination};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     env::args,
-    io::{stderr, stdout, BufReader, BufWriter, Read, Write},
+    io::{stderr, stdout, BufReader, BufWriter, IsTerminal, Read, Write},
     net::{TcpStream, ToSocketAddrs},
+    os::windows::io::AsHandle,
     time::Instant,
 };
 
 const MIN_MINECRAFT_PROTOCOL_VERSION: i32 = 0;
+const RESET_COLORS: &str = "\x1B[0m";
+const FG_YELLOW: &str = "\x1B[93m";
 
 // Error codes based on BSD sysexits (https://man.freebsd.org/cgi/man.cgi?query=sysexits&apropos=0&sektion=0&manpath=FreeBSD+11.2-stable&arch=default&format=html)
 enum ErrorCode {
     Ok = 0,
     IncorrectParameters = 65,
     HostDoesNotExist = 68,
-    Protocol = 76
+    Protocol = 76,
 }
 
 impl Termination for ErrorCode {
@@ -159,26 +161,24 @@ fn main() -> ErrorCode {
                     eprintln!("Error: Could not decode favicon")
                 }
             } else {
-                eprintln!("{}", "WARNING: Could not decode favicon because it has an unknown format. Printing it as raw data...".yellow());
+                print_warning("Could not decode favicon because it has an unknown format. Printing it as raw data...");
                 let _ = stdout().write_all(favicon.as_bytes());
             }
         } else {
-            eprintln!(
-                "{}",
-                "WARNING: This server doesn't have a favicon.".yellow()
-            );
+            print_warning("This server doesn't have a favicon.");
         }
     } else if arguments.raw_response {
         // Print raw response data
         println!("{status_response_json}");
     } else {
         // Parse status response JSON and print data
-        let server_description = chat::chat_to_str(&server_response.description);
-        println!("{}", server_description);
-        println!("{:>24}: {}", "Server version", server_response.version.name);
-        println!("{:>24}: {}", "Protocol", server_response.version.protocol);
+        let apply_font_styles = can_print_colors();
+        let server_description = chat::chat_to_str(&server_response.description, apply_font_styles);
+        println!("{server_description}");
+        println!("{:<24}{}", "Server version", server_response.version.name);
+        println!("{:<24}{}", "Protocol", server_response.version.protocol);
         println!(
-            "{:>24}: {current}/{max}",
+            "{:<24}{current}/{max}",
             "Players",
             current = server_response.players.online,
             max = server_response.players.max
@@ -193,24 +193,24 @@ fn main() -> ErrorCode {
         } else {
             "(No data available)"
         };
-        println!("{:>24}: {favicon}", "Favicon");
+        println!("{:<24}{favicon}", "Favicon");
 
         let enforces_secure_chat = if server_response.enforces_secure_chat.unwrap_or(false) {
             "Yes"
         } else {
             "No"
         };
-        println!("{:>24}: {enforces_secure_chat}", "Enforces secure chat");
+        println!("{:<24}{enforces_secure_chat}", "Enforces secure chat");
 
         let previews_chat = if server_response.previews_chat.unwrap_or(false) {
             "Yes"
         } else {
             "No"
         };
-        println!("{:>24}: {previews_chat}", "Previews chat");
+        println!("{:<24}{previews_chat}", "Previews chat");
 
         println!(
-            "{:>24}: {} ms",
+            "{:<24}{} ms",
             "Server latency",
             response_elapsed_time.as_millis()
         );
@@ -335,4 +335,27 @@ fn print_line_verbose(msg: &str, arguments: &CommandLineArguments) {
         let _ = stderr().write_all(msg.as_bytes());
         let _ = stderr().write_all("\n".as_bytes());
     }
+}
+
+fn print_warning(msg: &str) {
+    if can_print_colors() {
+        eprintln!("{FG_YELLOW}WARNING: {msg}{RESET_COLORS}");
+    } else {
+        eprintln!("WARNING: {msg}");
+    }
+}
+
+fn can_print_colors() -> bool {
+    // Determines whether we should show ANSI colors and other font styles or not. Based on http://bixense.com/clicolors/
+    let no_color_set = std::env::var("NO_COLOR").map_or(false, |v| v == "1");
+    if no_color_set {
+        return false;
+    }
+
+    let clicolor_force_set = std::env::var("CLICOLOR_FORCE").map_or(false, |v| v == "1");
+    if clicolor_force_set {
+        return true;
+    }
+
+    std::io::stdout().as_handle().is_terminal()
 }
