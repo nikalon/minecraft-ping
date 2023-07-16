@@ -174,10 +174,10 @@ fn main() -> ErrorCode {
         let apply_font_styles = can_print_colors(&std::io::stdout());
         let server_description = chat::chat_to_str(&server_response.description, apply_font_styles);
         println!("{server_description}");
-        println!("{:<24}{}", "Server version", server_response.version.name);
-        println!("{:<24}{}", "Protocol", server_response.version.protocol);
+        println!("{:<24} {}", "Server version", server_response.version.name);
+        println!("{:<24} {}", "Protocol", server_response.version.protocol);
         println!(
-            "{:<24}{current}/{max}",
+            "{:<24} {current}/{max}",
             "Players",
             current = server_response.players.online,
             max = server_response.players.max
@@ -192,24 +192,24 @@ fn main() -> ErrorCode {
         } else {
             "(No data available)"
         };
-        println!("{:<24}{favicon}", "Favicon");
+        println!("{:<24} {favicon}", "Favicon");
 
         let enforces_secure_chat = if server_response.enforces_secure_chat.unwrap_or(false) {
             "Yes"
         } else {
             "No"
         };
-        println!("{:<24}{enforces_secure_chat}", "Enforces secure chat");
+        println!("{:<24} {enforces_secure_chat}", "Enforces secure chat");
 
         let previews_chat = if server_response.previews_chat.unwrap_or(false) {
             "Yes"
         } else {
             "No"
         };
-        println!("{:<24}{previews_chat}", "Previews chat");
+        println!("{:<24} {previews_chat}", "Previews chat");
 
         println!(
-            "{:<24}{} ms",
+            "{:<24} {} ms",
             "Server latency",
             response_elapsed_time.as_millis()
         );
