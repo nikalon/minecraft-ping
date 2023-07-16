@@ -12,6 +12,13 @@ pub fn chat_to_str(text: &Value, apply_styles: bool) -> String {
     parse_component(text, apply_styles)
 }
 
+pub fn parse_string(string: &str, actually_apply_styles: bool) -> String {
+    // Parse text and apply styles if requested
+    let mut ret = String::with_capacity(string.len());
+    apply_styles(string, &mut ret, Style::default(), actually_apply_styles);
+    ret
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Color {
     red: u8,

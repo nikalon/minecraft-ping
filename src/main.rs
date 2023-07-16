@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     env::args,
     io::{stderr, stdout, BufReader, BufWriter, IsTerminal, Read, Write},
-    net::{TcpStream, ToSocketAddrs},
+    net::{Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs, UdpSocket},
     time::Instant,
 };
 
@@ -41,6 +41,14 @@ fn main() -> ErrorCode {
             return ErrorCode::IncorrectParameters;
         }
     };
+    if arguments.open_to_lan {
+        do_open_to_lan(&arguments)
+    } else {
+        do_server_list_ping(&arguments)
+    }
+}
+
+fn do_server_list_ping(arguments: &CommandLineArguments) -> ErrorCode {
     let address = (arguments.host.as_ref(), arguments.port)
         .to_socket_addrs()
         .ok()
@@ -53,7 +61,7 @@ fn main() -> ErrorCode {
         }
     };
 
-    print_line_verbose("Attempting to connect...", &arguments);
+    print_line_verbose("Attempting to connect...", arguments);
     let tcp_connection = match TcpStream::connect(address) {
         Ok(connection) => connection,
         Err(_) => {
@@ -65,7 +73,7 @@ fn main() -> ErrorCode {
     let mut buf_writer = BufWriter::new(&tcp_connection);
     print_line_verbose(
         format!("Connection established to {}", &arguments.host).as_ref(),
-        &arguments,
+        arguments,
     );
 
     // We need to ensure that we send the hostname (if provided) instead of the IP address because otherwise some servers
@@ -78,7 +86,7 @@ fn main() -> ErrorCode {
             return ErrorCode::Protocol;
         }
     };
-    print_line_verbose("Handshake request sent!", &arguments);
+    print_line_verbose("Handshake request sent!", arguments);
 
     match send_status_request(&mut buf_writer) {
         Ok(response) => response,
@@ -88,7 +96,7 @@ fn main() -> ErrorCode {
             return ErrorCode::Protocol;
         }
     };
-    print_line_verbose("Status request sent!", &arguments);
+    print_line_verbose("Status request sent!", arguments);
 
     let status_response_json = match read_status_response(&mut buf_reader) {
         Ok(response) => response,
@@ -98,7 +106,7 @@ fn main() -> ErrorCode {
             return ErrorCode::Protocol;
         }
     };
-    print_line_verbose("Received status response!", &arguments);
+    print_line_verbose("Received status response!", arguments);
     let server_response: Response = match serde_json::from_str(&status_response_json) {
         Ok(response) => response,
         Err(e) => {
@@ -121,7 +129,7 @@ fn main() -> ErrorCode {
             return ErrorCode::Protocol;
         }
     };
-    print_line_verbose("Sent ping request!", &arguments);
+    print_line_verbose("Sent ping request!", arguments);
 
     let payload = match read_pong_response(&mut buf_reader) {
         Ok(payload) => payload,
@@ -137,12 +145,12 @@ fn main() -> ErrorCode {
     }
 
     let response_elapsed_time = start_time.elapsed();
-    print_line_verbose("Received pong response!", &arguments);
+    print_line_verbose("Received pong response!", arguments);
     print_line_verbose(
         format!("Delay: {} ms", response_elapsed_time.as_millis()).as_ref(),
-        &arguments,
+        arguments,
     );
-    print_line_verbose("Disconnected", &arguments);
+    print_line_verbose("Disconnected", arguments);
 
     if arguments.get_favicon {
         // Print decoded favicon to stdout
@@ -327,6 +335,107 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     }
 
     Ok(payload)
+}
+
+fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
+    // Will listen for Open to LAN games in the local network. The game only supports Ipv4 sockets.
+    let bind_address = SocketAddr::from(([0, 0, 0, 0], 4445));
+    let ip = bind_address.ip().to_string();
+    let port = bind_address.port().to_string();
+    print_line_verbose(
+        format!("Attempting to bind to {ip}:{port}").as_ref(),
+        arguments,
+    );
+    let socket = match UdpSocket::bind(bind_address) {
+        Ok(socket) => socket,
+        Err(_) => {
+            eprintln!("Error: Could not bind socket to {ip}:{port}");
+            return ErrorCode::Protocol;
+        }
+    };
+    print_line_verbose("Socket bind successful", arguments);
+
+    print_line_verbose("Attempting to join multicast 224.0.2.60", arguments);
+    let multicast_group = Ipv4Addr::from([224, 0, 2, 60]);
+    let any_interface = Ipv4Addr::from([0, 0, 0, 0]);
+    if socket
+        .join_multicast_v4(&multicast_group, &any_interface)
+        .is_err()
+    {
+        let multicast_group_ip = multicast_group.to_string();
+        eprintln!("Error: Could not join multicast {multicast_group_ip}");
+        return ErrorCode::Protocol;
+    }
+    print_line_verbose("Joined multicast grop successfully", arguments);
+
+    print_line_verbose("Listening for incoming packets...", arguments);
+    let mut buffer = [0; 2048];
+    loop {
+        match socket.recv_from(&mut buffer) {
+            Ok((packet_length, origin_socket)) => {
+                let origin_socket_ip = origin_socket.ip().to_string();
+                let origin_socket_port = origin_socket.port().to_string();
+
+                // Parse received data. I refuse to use regular expressions because the format of the message is too simple
+                // to bother adding another dependency.
+                let buffer_portion: Vec<u8> = buffer.iter().cloned().take(packet_length).collect();
+                let message = match String::from_utf8(buffer_portion) {
+                    Ok(s) => s,
+                    Err(_) => {
+                        // Invalid format. Skip this packet.
+                        continue;
+                    }
+                };
+                let message = message.trim();
+                if message.starts_with("[MOTD]") && message.ends_with("[/AD]") {
+                    // Remove [MOTD] and [/AD] from the message
+                    let i_start = "[MOTD]".len();
+                    let i_end = message.len() - "[/AD]".len();
+                    let trimmed_message = &message[i_start..i_end];
+
+                    let mut split = trimmed_message.split("[/MOTD][AD]");
+                    let motd = match split.next() {
+                        Some(motd) => motd,
+                        None => {
+                            // Invalid format. Skip this packet.
+                            continue;
+                        }
+                    };
+                    let port = match split.next() {
+                        Some(port) => port,
+                        None => {
+                            // Invalid format. Skip this packet.
+                            continue;
+                        }
+                    };
+                    if split.count() != 0 {
+                        // We should've read everything in the packet already. If that's not the case this is considered an
+                        // invalid format. Skip it.
+                        continue;
+                    }
+
+                    print_line_verbose(format!("Received a packet of {packet_length} bytes from {origin_socket_ip}:{origin_socket_port}").as_ref(), arguments);
+                    if arguments.raw_response {
+                        println!("{message}");
+                    } else {
+                        let with_styles = can_print_colors(&std::io::stdout());
+                        let styled_motd = chat::parse_string(motd, with_styles);
+                        println!("{styled_motd}");
+                        println!("Available at {origin_socket_ip}:{port}");
+                        println!();
+                    }
+
+                    break;
+                } else {
+                    print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
+                }
+            }
+            Err(_) => {
+                eprintln!("Error: I/O error when reading incoming data from a multicast socket")
+            }
+        }
+    }
+    ErrorCode::Ok
 }
 
 fn print_line_verbose(msg: &str, arguments: &CommandLineArguments) {

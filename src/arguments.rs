@@ -3,6 +3,7 @@ pub struct CommandLineArguments {
     pub get_favicon: bool,
     pub raw_response: bool,
     pub verbose: bool,
+    pub open_to_lan: bool,
     pub host: String,
     pub port: u16,
 }
@@ -10,9 +11,15 @@ pub struct CommandLineArguments {
 impl CommandLineArguments {
     pub fn parse<T: Iterator<Item = String>>(args: &mut T) -> Result<Self, String> {
         let mut arguments = CommandLineArguments {
-            get_favicon: false,
+            // General flags
             raw_response: false,
             verbose: false,
+
+            // Flags for Open to LAN mode
+            open_to_lan: false,
+
+            // Flags for default mode
+            get_favicon: false,
             host: "".to_owned(),
             port: 25565,
         };
@@ -32,6 +39,7 @@ impl CommandLineArguments {
                     "-v" | "--verbose" => arguments.verbose = true,
                     "-f" | "--favicon" => arguments.get_favicon = true,
                     "-r" | "--raw-response" => arguments.raw_response = true,
+                    "-l" | "--lan" => arguments.open_to_lan = true,
                     _ => return Err(format!("Unrecognized flag: {flag}")),
                 }
             } else {
@@ -40,17 +48,24 @@ impl CommandLineArguments {
             }
         }
 
-        // Parse address as a required argument
-        match args.next() {
-            Some(host) => arguments.host = host,
-            None => return Err("No address provided".to_owned()),
-        }
+        if arguments.open_to_lan {
+            // Open to LAN mode. Host and port not needed.
+            if arguments.get_favicon {
+                return Err("-f is incompatible with -l".to_owned());
+            }
+        } else {
+            // Normal mode. Parse address as a required argument.
+            match args.next() {
+                Some(host) => arguments.host = host,
+                None => return Err("No address provided".to_owned()),
+            }
 
-        // Parse port as an optional argument
-        if let Some(port) = args.next() {
-            arguments.port = port
-                .parse()
-                .map_err(|_| format!("Invalid port \'{port}\'"))?;
+            // Parse port as an optional argument
+            if let Some(port) = args.next() {
+                arguments.port = port
+                    .parse()
+                    .map_err(|_| format!("Invalid port \'{port}\'"))?;
+            }
         }
 
         // There should be no more arguments to parse
@@ -82,6 +97,7 @@ mod cli_arguments_tests {
             get_favicon: false,
             raw_response: false,
             verbose: false,
+            open_to_lan: false,
             host: "127.0.0.1".to_owned(),
             port: 25565,
         });
@@ -100,6 +116,7 @@ mod cli_arguments_tests {
             get_favicon: false,
             raw_response: false,
             verbose: false,
+            open_to_lan: false,
             host: "127.0.0.1".to_owned(),
             port: 25560,
         });
@@ -129,6 +146,7 @@ mod cli_arguments_tests {
             get_favicon: false,
             raw_response: false,
             verbose: true,
+            open_to_lan: false,
             host: "localhost".to_owned(),
             port: 25565,
         });
@@ -148,6 +166,7 @@ mod cli_arguments_tests {
             get_favicon: false,
             raw_response: false,
             verbose: true,
+            open_to_lan: false,
             host: "localhost".to_owned(),
             port: 1000,
         });
