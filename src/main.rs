@@ -425,13 +425,20 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
                         println!();
                     }
 
+                    if let Err(e) = socket.leave_multicast_v4(&multicast_group, &any_interface) {
+                        print_warning(format!("There was an error when attempting to leave multicast group {multicast_group}. More details below:").as_ref());
+                        eprintln!("{e}");
+                        return ErrorCode::Protocol;
+                    }
                     break;
                 } else {
                     print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
                 }
             }
-            Err(_) => {
-                eprintln!("Error: I/O error when reading incoming data from a multicast socket")
+            Err(e) => {
+                eprintln!("Error: I/O error when reading incoming data from a multicast socket");
+                eprintln!("{e}");
+                return ErrorCode::Protocol;
             }
         }
     }
