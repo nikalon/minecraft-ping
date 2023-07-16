@@ -156,16 +156,22 @@ fn do_server_list_ping(arguments: &CommandLineArguments) -> ErrorCode {
         // Print decoded favicon to stdout
         if let Some(favicon) = server_response.favicon {
             const FORMAT: &str = "data:image/png;base64,";
-            if favicon.starts_with(FORMAT) {
-                let mut buf = Vec::with_capacity(favicon.len());
-                // Delete prefix and decode the image as Base64
-                let result = favicon
-                    .strip_prefix(FORMAT)
-                    .map(|favicon| favicon.as_bytes())
-                    .map(|favicon| general_purpose::STANDARD.decode_vec(favicon, &mut buf))
-                    .map(|_| stdout().write_all(&buf));
-                if result.is_none() {
-                    eprintln!("Error: Could not decode favicon")
+            if favicon.is_empty() {
+                print_warning("This server doesn't have a favicon.");
+            } else if favicon.starts_with(FORMAT) {
+                if arguments.raw_response {
+                    let _ = stdout().write_all(favicon.as_bytes());
+                } else {
+                    let mut buf = Vec::with_capacity(favicon.len());
+                    // Delete prefix and decode the image as Base64
+                    let result = favicon
+                        .strip_prefix(FORMAT)
+                        .map(|favicon| favicon.as_bytes())
+                        .map(|favicon| general_purpose::STANDARD.decode_vec(favicon, &mut buf))
+                        .map(|_| stdout().write_all(&buf));
+                    if result.is_none() {
+                        eprintln!("Error: Could not decode favicon")
+                    }
                 }
             } else {
                 print_warning("Could not decode favicon because it has an unknown format. Printing it as raw data...");
