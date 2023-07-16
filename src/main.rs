@@ -171,7 +171,7 @@ fn main() -> ErrorCode {
         println!("{status_response_json}");
     } else {
         // Parse status response JSON and print data
-        let apply_font_styles = can_print_colors();
+        let apply_font_styles = can_print_colors(&std::io::stdout());
         let server_description = chat::chat_to_str(&server_response.description, apply_font_styles);
         println!("{server_description}");
         println!("{:<24}{}", "Server version", server_response.version.name);
@@ -337,24 +337,29 @@ fn print_line_verbose(msg: &str, arguments: &CommandLineArguments) {
 }
 
 fn print_warning(msg: &str) {
-    if can_print_colors() {
-        eprintln!("{FG_YELLOW}WARNING: {msg}{RESET_COLORS}");
-    } else {
-        eprintln!("WARNING: {msg}");
+    let stderr = std::io::stderr().lock();
+    let print_colors = can_print_colors(&stderr);
+    if print_colors {
+        eprint!("{FG_YELLOW}");
     }
+    eprint!("WARNING: {msg}");
+    if print_colors {
+        eprint!("{RESET_COLORS}");
+    }
+    eprintln!();
 }
 
-fn can_print_colors() -> bool {
-        // Determines whether we should show ANSI colors and other font styles or not. Based on http://bixense.com/clicolors/
-        let no_color_set = std::env::var("NO_COLOR").map_or(false, |v| v == "1");
-        if no_color_set {
-            return false;
-        }
+fn can_print_colors<T: IsTerminal>(stream_handle: &T) -> bool {
+    // Determines whether we should show ANSI colors and other font styles or not. Based on http://bixense.com/clicolors/
+    let no_color_set = std::env::var("NO_COLOR").map_or(false, |v| v == "1");
+    if no_color_set {
+        return false;
+    }
 
-        let clicolor_force_set = std::env::var("CLICOLOR_FORCE").map_or(false, |v| v == "1");
-        if clicolor_force_set {
-            return true;
-        }
+    let clicolor_force_set = std::env::var("CLICOLOR_FORCE").map_or(false, |v| v == "1");
+    if clicolor_force_set {
+        return true;
+    }
 
-        return std::io::stdout().is_terminal();
+    stream_handle.is_terminal()
 }
