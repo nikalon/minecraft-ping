@@ -361,9 +361,12 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
     };
     print_line_verbose("Socket bind successful", arguments);
 
-    print_line_verbose("Attempting to join multicast 224.0.2.60", arguments);
     let multicast_group = Ipv4Addr::from([224, 0, 2, 60]);
     let any_interface = Ipv4Addr::from([0, 0, 0, 0]);
+    print_line_verbose(
+        format!("Attempting to join multicast {multicast_group}").as_ref(),
+        arguments,
+    );
     if socket
         .join_multicast_v4(&multicast_group, &any_interface)
         .is_err()
@@ -435,7 +438,13 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
                         print_warning(format!("There was an error when attempting to leave multicast group {multicast_group}. More details below:").as_ref());
                         eprintln!("{e}");
                         return ErrorCode::Protocol;
+                    } else {
+                        print_line_verbose(
+                            format!("Left multicast group {multicast_group}").as_ref(),
+                            arguments,
+                        );
                     }
+
                     break;
                 } else {
                     print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
