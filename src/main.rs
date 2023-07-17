@@ -8,6 +8,7 @@ use data_types::*;
 use std::process::{ExitCode, Termination};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
+    collections::HashSet,
     env::args,
     io::{stderr, stdout, BufReader, BufWriter, IsTerminal, Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs, UdpSocket},
@@ -344,7 +345,7 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
 }
 
 fn listen_for_lan_games(arguments: &CommandLineArguments) -> ErrorCode {
-    // Will listen for Open to LAN games in the local network. The game only supports Ipv4 sockets.
+    // Listen for Open to LAN games. Only Ipv4 sockets are supported.
     let bind_address = SocketAddr::from(([0, 0, 0, 0], 4445));
     let ip = bind_address.ip().to_string();
     let port = bind_address.port().to_string();
@@ -377,6 +378,7 @@ fn listen_for_lan_games(arguments: &CommandLineArguments) -> ErrorCode {
     print_line_verbose("Joined multicast grop successfully", arguments);
 
     print_line_verbose("Listening for incoming packets...", arguments);
+    let mut unique_lan_servers = HashSet::new();
     let mut buffer = [0; 2048];
     loop {
         match socket.recv_from(&mut buffer) {
@@ -395,49 +397,23 @@ fn listen_for_lan_games(arguments: &CommandLineArguments) -> ErrorCode {
                         continue;
                     }
                 };
-                let message = message.trim();
-                if message.starts_with("[MOTD]") && message.ends_with("[/AD]") {
-                    // Remove [MOTD] and [/AD] from the message
-                    let i_start = "[MOTD]".len();
-                    let i_end = message.len() - "[/AD]".len();
-                    let trimmed_message = &message[i_start..i_end];
 
-                    let mut split = trimmed_message.split("[/MOTD][AD]");
-                    let motd = match split.next() {
-                        Some(motd) => motd,
-                        None => {
-                            // Invalid format. Skip this packet.
-                            print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
-                            continue;
+                if let Some((motd, port)) = parse_open_to_lan_message(&message) {
+                    // Cache known servers as long as we keep listening for LAN games
+                    if unique_lan_servers.insert(message.clone()) {
+                        // Server wasn't cached. Print it only once and ignore further Open to LAN messages from this server
+                        if arguments.raw_response {
+                            println!("{message}");
+                        } else {
+                            let with_styles = can_print_colors(&std::io::stdout());
+                            let styled_motd = chat::parse_styles_to_string(motd, with_styles);
+                            println!("[{origin_socket_ip}:{port}]\t{styled_motd}");
                         }
-                    };
-                    let port = match split.next() {
-                        Some(port) => port,
-                        None => {
-                            // Invalid format. Skip this packet.
-                            print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
-                            continue;
-                        }
-                    };
-                    if split.count() != 0 {
-                        // We should've read everything in the packet already. If that's not the case this is considered an
-                        // invalid format. Skip it.
-                        print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
-                        continue;
+                    } else if arguments.verbose {
+                        print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because this server is already known").as_ref(), arguments);
                     }
 
-                    print_line_verbose(format!("Received a packet of {packet_length} bytes from {origin_socket_ip}:{origin_socket_port}").as_ref(), arguments);
-                    if arguments.raw_response {
-                        println!("{message}");
-                    } else {
-                        let with_styles = can_print_colors(&std::io::stdout());
-                        let styled_motd = chat::parse_styles_to_string(motd, with_styles);
-                        println!("{styled_motd}");
-                        println!("Available at {origin_socket_ip}:{port}");
-                        println!();
-                    }
-
-                    if let Err(e) = socket.leave_multicast_v4(&multicast_group, &any_interface) {
+                    /*if let Err(e) = socket.leave_multicast_v4(&multicast_group, &any_interface) {
                         print_warning(format!("There was an error when attempting to leave multicast group {multicast_group}").as_ref());
                         eprintln!("More details: {e}");
                         return ErrorCode::Protocol;
@@ -446,9 +422,8 @@ fn listen_for_lan_games(arguments: &CommandLineArguments) -> ErrorCode {
                             format!("Left multicast group {multicast_group}").as_ref(),
                             arguments,
                         );
-                    }
+                    }*/
 
-                    break;
                 } else {
                     print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
                 }
@@ -460,7 +435,40 @@ fn listen_for_lan_games(arguments: &CommandLineArguments) -> ErrorCode {
             }
         }
     }
-    ErrorCode::Ok
+}
+
+fn parse_open_to_lan_message(message: &str) -> Option<(&str, &str)> {
+    if message.starts_with("[MOTD]") && message.ends_with("[/AD]") {
+        // Remove [MOTD] and [/AD] from the message
+        let i_start = "[MOTD]".len();
+        let i_end = message.len() - "[/AD]".len();
+        let trimmed_message = &message[i_start..i_end];
+
+        let mut split = trimmed_message.split("[/MOTD][AD]");
+        let motd = match split.next() {
+            Some(motd) => motd,
+            None => {
+                // Invalid format. Skip this packet.
+                return None;
+            }
+        };
+        let port = match split.next() {
+            Some(port) => port,
+            None => {
+                // Invalid format. Skip this packet.
+                return None;
+            }
+        };
+        if split.count() != 0 {
+            // We should've read everything in the packet already. If that's not the case this is considered an
+            // invalid format. Skip it.
+            return None;
+        }
+
+        Some((motd, port))
+    } else {
+        None
+    }
 }
 
 fn print_line_verbose(msg: &str, arguments: &CommandLineArguments) {
