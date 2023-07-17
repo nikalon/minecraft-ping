@@ -42,13 +42,13 @@ fn main() -> ErrorCode {
         }
     };
     if arguments.open_to_lan {
-        do_open_to_lan(&arguments)
+        listen_for_lan_games(&arguments)
     } else {
-        do_server_list_ping(&arguments)
+        ping_server(&arguments)
     }
 }
 
-fn do_server_list_ping(arguments: &CommandLineArguments) -> ErrorCode {
+fn ping_server(arguments: &CommandLineArguments) -> ErrorCode {
     let address = (arguments.host.as_ref(), arguments.port)
         .to_socket_addrs()
         .ok()
@@ -186,7 +186,7 @@ fn do_server_list_ping(arguments: &CommandLineArguments) -> ErrorCode {
     } else {
         // Parse status response JSON and print data
         let apply_font_styles = can_print_colors(&std::io::stdout());
-        let server_description = chat::chat_to_str(&server_response.description, apply_font_styles);
+        let server_description = chat::parse_chat_object_json_to_string(&server_response.description, apply_font_styles);
         println!("{server_description}");
         println!("{:<24} {}", "Server version", server_response.version.name);
         println!("{:<24} {}", "Protocol", server_response.version.protocol);
@@ -343,7 +343,7 @@ fn read_pong_response<T: Read>(input: &mut T) -> Result<i64, String> {
     Ok(payload)
 }
 
-fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
+fn listen_for_lan_games(arguments: &CommandLineArguments) -> ErrorCode {
     // Will listen for Open to LAN games in the local network. The game only supports Ipv4 sockets.
     let bind_address = SocketAddr::from(([0, 0, 0, 0], 4445));
     let ip = bind_address.ip().to_string();
@@ -354,8 +354,9 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
     );
     let socket = match UdpSocket::bind(bind_address) {
         Ok(socket) => socket,
-        Err(_) => {
+        Err(e) => {
             eprintln!("Error: Could not bind socket to {ip}:{port}");
+            eprintln!("More details: {e}");
             return ErrorCode::Protocol;
         }
     };
@@ -367,12 +368,10 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
         format!("Attempting to join multicast {multicast_group}").as_ref(),
         arguments,
     );
-    if socket
-        .join_multicast_v4(&multicast_group, &any_interface)
-        .is_err()
-    {
+    if let Err(e) = socket.join_multicast_v4(&multicast_group, &any_interface) {
         let multicast_group_ip = multicast_group.to_string();
         eprintln!("Error: Could not join multicast {multicast_group_ip}");
+        eprintln!("More details: {e}");
         return ErrorCode::Protocol;
     }
     print_line_verbose("Joined multicast grop successfully", arguments);
@@ -392,6 +391,7 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
                     Ok(s) => s,
                     Err(_) => {
                         // Invalid format. Skip this packet.
+                        print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
                         continue;
                     }
                 };
@@ -407,6 +407,7 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
                         Some(motd) => motd,
                         None => {
                             // Invalid format. Skip this packet.
+                            print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
                             continue;
                         }
                     };
@@ -414,12 +415,14 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
                         Some(port) => port,
                         None => {
                             // Invalid format. Skip this packet.
+                            print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
                             continue;
                         }
                     };
                     if split.count() != 0 {
                         // We should've read everything in the packet already. If that's not the case this is considered an
                         // invalid format. Skip it.
+                        print_line_verbose(format!("Ignored packet from {origin_socket_ip}:{origin_socket_port} because the format is not valid").as_ref(), arguments);
                         continue;
                     }
 
@@ -428,15 +431,15 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
                         println!("{message}");
                     } else {
                         let with_styles = can_print_colors(&std::io::stdout());
-                        let styled_motd = chat::parse_string(motd, with_styles);
+                        let styled_motd = chat::parse_styles_to_string(motd, with_styles);
                         println!("{styled_motd}");
                         println!("Available at {origin_socket_ip}:{port}");
                         println!();
                     }
 
                     if let Err(e) = socket.leave_multicast_v4(&multicast_group, &any_interface) {
-                        print_warning(format!("There was an error when attempting to leave multicast group {multicast_group}. More details below:").as_ref());
-                        eprintln!("{e}");
+                        print_warning(format!("There was an error when attempting to leave multicast group {multicast_group}").as_ref());
+                        eprintln!("More details: {e}");
                         return ErrorCode::Protocol;
                     } else {
                         print_line_verbose(
@@ -452,7 +455,7 @@ fn do_open_to_lan(arguments: &CommandLineArguments) -> ErrorCode {
             }
             Err(e) => {
                 eprintln!("Error: I/O error when reading incoming data from a multicast socket");
-                eprintln!("{e}");
+                eprintln!("More details: {e}");
                 return ErrorCode::Protocol;
             }
         }

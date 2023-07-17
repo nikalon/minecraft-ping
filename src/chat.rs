@@ -7,12 +7,12 @@ const UNDERLINE: &str = "\x1B[4m";
 const SLOW_BLINK: &str = "\x1B[5m";
 const STRIKETHROUGH: &str = "\x1B[9m";
 
-pub fn chat_to_str(text: &Value, apply_styles: bool) -> String {
+pub fn parse_chat_object_json_to_string(text: &Value, apply_styles: bool) -> String {
     // Parse text as a JSON chat object and apply font styles
     parse_component(text, apply_styles)
 }
 
-pub fn parse_string(string: &str, actually_apply_styles: bool) -> String {
+pub fn parse_styles_to_string(string: &str, actually_apply_styles: bool) -> String {
     // Parse text and apply styles if requested
     let mut ret = String::with_capacity(string.len());
     apply_styles(string, &mut ret, Style::default(), actually_apply_styles);
@@ -310,7 +310,7 @@ mod chat_component_tests {
     fn test_parse_null() {
         let text = json!(null);
         let expected = "";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -318,7 +318,7 @@ mod chat_component_tests {
     fn test_parse_boolean() {
         let text = json!(true);
         let expected = "true";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -326,7 +326,7 @@ mod chat_component_tests {
     fn test_parse_number() {
         let text = json!(23.4);
         let expected = "23.4";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -334,7 +334,7 @@ mod chat_component_tests {
     fn test_parse_string() {
         let text = json!("THIS IS TEXT");
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -342,7 +342,7 @@ mod chat_component_tests {
     fn test_parse_empty_object_component() {
         let text = json!({});
         let expected = "";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -354,7 +354,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -374,7 +374,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -396,7 +396,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS TEXT";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -421,7 +421,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS SOME TEXT";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -435,7 +435,7 @@ mod chat_component_tests {
             }
         );
         let expected = "";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -450,7 +450,7 @@ mod chat_component_tests {
             }
         );
         let expected = "THIS IS A";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -458,7 +458,7 @@ mod chat_component_tests {
     fn test_parse_empty_array() {
         let text = json!([]);
         let expected = "";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -466,7 +466,7 @@ mod chat_component_tests {
     fn test_parse_array_of_primitive_types() {
         let text = json!([true, false, 45.6]);
         let expected = "truefalse45.6";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -474,7 +474,7 @@ mod chat_component_tests {
     fn test_parse_array_of_strings() {
         let text = json!(["Hello, ", "world!"]);
         let expected = "Hello, world!";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -482,7 +482,7 @@ mod chat_component_tests {
     fn test_parse_nested_arrays_of_strings() {
         let text = json!([[["Hello, ", "world!"]]]);
         let expected = "Hello, world!";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 
@@ -496,7 +496,7 @@ mod chat_component_tests {
             ]
         );
         let expected = "Hello, world!";
-        let result = chat_to_str(&text, APPLY_FONT_STYLES);
+        let result = parse_chat_object_json_to_string(&text, APPLY_FONT_STYLES);
         assert_eq!(expected, result);
     }
 }

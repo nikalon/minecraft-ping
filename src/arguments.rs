@@ -18,7 +18,7 @@ impl CommandLineArguments {
             // Flags for Open to LAN mode
             open_to_lan: false,
 
-            // Flags for default mode
+            // Flags for ping mode
             get_favicon: false,
             host: "".to_owned(),
             port: 25565,
