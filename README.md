@@ -3,7 +3,8 @@ A small CLI tool that queries information from Minecraft Java Edition servers.
 
 It supports colored output, icon downloading, IPv4, IPv6 and ping via Open To LAN for singleplayer maps. Example:
 
-![Screenshot of an example of this program](images\example.png)
+![Screenshot of an example of this program](https://github.com/nikalon/minecraft-ping/blob/main/images/example.png)
+
 
 ## Building
 Install a [Rust compiler](https://www.rust-lang.org/tools/install) and execute the following command:
